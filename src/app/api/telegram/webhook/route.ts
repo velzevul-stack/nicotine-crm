@@ -1924,7 +1924,7 @@ bot.on('text', async (ctx) => {
                   stock: availableQty,
                 } as FlavorData;
               })
-              .filter((f) => f.stock > 0); // Показываем только товары в наличии
+              .filter((f) => (f.stock ?? 0) > 0); // Показываем только товары в наличии
 
             // Пропускаем формат, если нет вкусов и они требуются
             if (fFlavors.length === 0 && formatConfig.showFlavors !== false) {
@@ -2804,7 +2804,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
                   stock: availableQty,
                 } as FlavorData;
               })
-              .filter((f) => f.stock > 0);
+              .filter((f) => (f.stock ?? 0) > 0);
 
             if (fFlavors.length === 0 && formatConfig.showFlavors !== false) {
               continue;
@@ -2994,7 +2994,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
                   stock: availableQty,
                 } as FlavorData;
               })
-              .filter((f) => f.stock > 0);
+              .filter((f) => (f.stock ?? 0) > 0);
 
             if (fFlavors.length === 0 && formatConfig.showFlavors !== false) {
               continue;

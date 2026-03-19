@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
               stock: availableQty,
             } as FlavorData;
           })
-          .filter((f) => f.stock > 0); // Показываем только товары в наличии
+          .filter((f) => (f.stock ?? 0) > 0); // Показываем только товары в наличии
 
         // Skip format if no flavors and flavors are required
         if (fFlavors.length === 0 && formatConfig.showFlavors !== false) {
