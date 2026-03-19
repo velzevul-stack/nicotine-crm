@@ -1,0 +1,231 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --background: 0 0% 98%;
+    --foreground: 220 20% 7%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 7%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 7%;
+
+    --primary: 175 80% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 10% 96%;
+    --secondary-foreground: 220 20% 7%;
+
+    --muted: 220 10% 96%;
+    --muted-foreground: 215 12% 40%;
+
+    --accent: 175 60% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 150 60% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 90% 55%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 10% 90%;
+    --input: 220 10% 90%;
+    --ring: 175 80% 50%;
+
+    --glass-bg: 0 0% 100% / 0.8;
+    --glass-border: 220 10% 85% / 0.5;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 220 20% 7%;
+    --sidebar-primary: 175 80% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 10% 96%;
+    --sidebar-accent-foreground: 220 20% 7%;
+    --sidebar-border: 220 10% 90%;
+    --sidebar-ring: 175 80% 50%;
+  }
+
+  /* Premium Dark theme - reference #121212, pastel accents */
+  .dark {
+    --background: 0 0% 7%;
+    --foreground: 240 6% 96%;
+
+    --card: 220 14% 11%;
+    --card-foreground: 240 6% 96%;
+
+    --popover: 220 28% 15%;
+    --popover-foreground: 240 6% 96%;
+
+    /* Pastel mint - primary #BFE7E5 */
+    --primary: 176 45% 83%;
+    --primary-foreground: 0 0% 7%;
+
+    /* Pastel accents (hex) - reference palette */
+    --pastel-mint: #BFE7E5;
+    --pastel-blue: #CFE6F2;
+    --pastel-lavender: #DED8F6;
+    --pastel-pink: #F2D6DE;
+    --pastel-cream: #F5F0E8;
+
+    --secondary: 220 28% 15%;
+    --secondary-foreground: 240 6% 90%;
+
+    --muted: 220 28% 15%;
+    --muted-foreground: 220 9% 63%;
+
+    --accent: 260 45% 92%;
+    --accent-foreground: 0 0% 7%;
+
+    --destructive: 350 45% 90%;
+    --destructive-foreground: 0 0% 7%;
+
+    --success: 150 60% 45%;
+    --success-foreground: 0 0% 7%;
+
+    --warning: 38 90% 55%;
+    --warning-foreground: 0 0% 7%;
+
+    --border: 220 15% 18%;
+    --input: 220 20% 18%;
+    --ring: 176 45% 83%;
+
+    --glass-bg: 223 24% 11% / 0.95;
+    --glass-border: 220 15% 18%;
+
+    --modal-bg: 223 24% 11%;
+    --modal-border: 220 15% 18%;
+    --modal-inner: 220 28% 15%;
+
+    --sidebar-background: 220 17% 7%;
+    --sidebar-foreground: 240 6% 96%;
+    --sidebar-primary: 176 45% 83%;
+    --sidebar-primary-foreground: 0 0% 7%;
+    --sidebar-accent: 220 28% 15%;
+    --sidebar-accent-foreground: 240 6% 96%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 176 45% 83%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+  }
+
+  .dark body {
+    background-color: #121212;
+    background-image: 
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(191, 231, 229, 0.06) 0%, transparent 50%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 50%);
+  }
+
+  /* Hide scrollbar for mobile feel */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+@layer utilities {
+  .font-mono-nums {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .glass {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsl(var(--glass-border));
+  }
+
+  .glass-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--glass-border));
+    border-radius: 1.25rem; /* rounded-[20px] */
+  }
+
+  .dark .glass-card {
+    background: #151922;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 20px -5px hsl(175 80% 50% / 0.3),
+                0 0 40px -10px hsl(175 80% 50% / 0.15);
+  }
+
+  .glow-text {
+    text-shadow: 0 0 20px hsl(175 80% 50% / 0.4);
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(175 80% 50%), hsl(190 80% 45%));
+  }
+
+  .gradient-surface {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--background)) 0%,
+      hsl(var(--background)) 100%
+    );
+  }
+
+  .gradient-destructive {
+    background: linear-gradient(135deg, #F2D6DE 0%, #F2D6DE 100%);
+  }
+
+  .glow-destructive {
+    box-shadow: 0 0 20px -5px rgba(242, 214, 222, 0.4);
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(175 80% 55%), hsl(190 80% 50%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Pastel gradient buttons - pleasant palette */
+  .btn-pastel-mint {
+    background: linear-gradient(135deg, #9ED9D4 0%, #BFE7E5 50%, #B8E8D8 100%);
+    box-shadow: 0 4px 16px rgba(158, 217, 212, 0.3);
+  }
+  .btn-pastel-blue {
+    background: linear-gradient(135deg, #A5D8F8 0%, #CFE6F2 50%, #B8D8F0 100%);
+    box-shadow: 0 4px 16px rgba(165, 216, 248, 0.3);
+  }
+  .btn-pastel-lavender {
+    background: linear-gradient(135deg, #D4C8F0 0%, #DED8F6 50%, #E4DCF8 100%);
+    box-shadow: 0 4px 16px rgba(212, 200, 240, 0.3);
+  }
+  .btn-pastel-pink {
+    background: linear-gradient(135deg, #F5C4B8 0%, #F2D6DE 50%, #F8D8E0 100%);
+    box-shadow: 0 4px 16px rgba(242, 196, 184, 0.3);
+  }
+  .btn-pastel-peach {
+    background: linear-gradient(135deg, #F5D4B8 0%, #F8E4D8 50%, #F5E6D4 100%);
+    box-shadow: 0 4px 16px rgba(245, 212, 184, 0.3);
+  }
+  .btn-pastel-lilac {
+    background: linear-gradient(135deg, #E4D4F8 0%, #E8DCF5 50%, #EDE4F8 100%);
+    box-shadow: 0 4px 16px rgba(228, 212, 248, 0.3);
+  }
+}
