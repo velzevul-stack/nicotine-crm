@@ -264,9 +264,9 @@ export function Dashboard() {
             <div className="space-y-3">
               {[
                 { label: 'Продаж', value: `${today.salesCount} шт` },
-                { label: 'Наличка', value: `${(today.cashAmount ?? 0).toLocaleString()}₽` },
-                { label: 'Карта', value: `${(today.cardAmount ?? 0).toLocaleString()}₽` },
-                { label: 'В долг', value: `${(today.debtAmount ?? 0).toLocaleString()}₽` },
+                { label: 'Наличка', value: formatCurrency(today.cashAmount ?? 0, currency) },
+                { label: 'Карта', value: formatCurrency(today.cardAmount ?? 0, currency) },
+                { label: 'В долг', value: formatCurrency(today.debtAmount ?? 0, currency) },
                 { label: 'Резервы', value: `${today.reservationsCount ?? 0} шт` },
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between">
@@ -277,7 +277,7 @@ export function Dashboard() {
               <div className="pt-3 border-t border-white/10 flex items-center justify-between">
                 <span className="text-[#F5F5F7] font-semibold">Итого</span>
                 <span className="text-[#BFE7E5] font-bold text-lg">
-                  {(today.revenue ?? 0).toLocaleString()}₽
+                  {formatCurrency(today.revenue ?? 0, currency)}
                 </span>
               </div>
             </div>
@@ -426,7 +426,7 @@ export function Dashboard() {
                     </span>
                   </div>
                   <p className="text-xs text-[#9CA3AF]">
-                    {day.lastSaleDescription || `${(day.revenue ?? 0).toLocaleString()}₽`}
+                    {day.lastSaleDescription || formatCurrency(day.revenue ?? 0, currency)}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 ml-3">
