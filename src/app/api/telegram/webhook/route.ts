@@ -822,14 +822,14 @@ bot.on('successful_payment', async (ctx) => {
   });
 
   // Уведомляем реферера (вне транзакции)
-  const referrerEndsAtDate = referrerEndsAt;
-  if (referrerTelegramId && referrerEndsAtDate) {
+  if (referrerTelegramId && referrerEndsAt) {
     try {
+      const dateStr = new Date(referrerEndsAt).toLocaleDateString('ru-RU');
       await bot.telegram.sendMessage(
         parseInt(referrerTelegramId),
         `🎉 Поздравляем!\n\n` +
         `Ваш реферал купил подписку, и вы получили бесплатный месяц!\n\n` +
-        `Ваша подписка теперь действует до: ${referrerEndsAtDate.toLocaleDateString('ru-RU')}\n\n` +
+        `Ваша подписка теперь действует до: ${dateStr}\n\n` +
         `Используйте /referrals для просмотра всех ваших рефералов.`
       );
     } catch (error) {
