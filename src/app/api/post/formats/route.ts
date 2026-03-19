@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { IsNull } from 'typeorm';
+import { IsNull, type FindOptionsWhere } from 'typeorm';
 import { getDataSource } from '@/lib/db/data-source';
 import { PostFormatEntity, PostFormat } from '@/lib/db/entities';
 import { getSession } from '@/lib/auth';
@@ -15,7 +15,9 @@ export async function GET() {
     const formatRepo = ds.getRepository(PostFormatEntity);
 
     // Get global formats (shopId is null) and shop-specific formats
-    const whereConditions = [{ isActive: true, shopId: IsNull() }];
+    const whereConditions: FindOptionsWhere<PostFormat>[] = [
+      { isActive: true, shopId: IsNull() },
+    ];
     if (session.shopId) {
       whereConditions.push({ isActive: true, shopId: session.shopId });
     }
