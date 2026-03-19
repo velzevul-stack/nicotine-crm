@@ -14,6 +14,7 @@ interface FilterModalProps {
   categories: any[];
   strengths: string[];
   brands: any[];
+  colors?: string[];
 }
 
 export function FilterModal({
