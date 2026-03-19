@@ -1,7 +1,7 @@
 export { UserEntity, type User } from './User';
-export { ShopEntity } from './Shop';
+export { ShopEntity, type Shop } from './Shop';
 export { UserShopEntity } from './UserShop';
-export { CategoryEntity } from './Category';
+export { CategoryEntity, type CategoryField } from './Category';
 export { BrandEntity } from './Brand';
 export { ProductFormatEntity } from './ProductFormat';
 export { FlavorEntity } from './Flavor';
