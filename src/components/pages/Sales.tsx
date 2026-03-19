@@ -760,8 +760,8 @@ function CatalogView({ inventory, onSelect, reservedFlavorIds }: { inventory: In
             className="w-full flex items-center justify-between p-3 border-b last:border-0 hover:bg-secondary/50 text-left transition-colors rounded-lg mb-1"
           >
             <div className="flex items-center gap-2">
-              {item.emoji && <span>{item.emoji}</span>}
-              {item.emojiPrefix && <span>{item.emojiPrefix}</span>}
+              {'emoji' in item && item.emoji && <span>{item.emoji}</span>}
+              {'emojiPrefix' in item && item.emojiPrefix && <span>{item.emojiPrefix}</span>}
               <span className="text-sm">{item.name}</span>
             </div>
             {currentLevel === 3 ? (
