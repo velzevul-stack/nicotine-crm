@@ -86,6 +86,8 @@ npm run build
 npm run db:migrate
 ```
 
+Приложение в production **не подгружает** файлы `src/lib/db/migrations/*.ts` при старте (это делает только `npm run db:migrate` через `tsx`). Иначе Node падал бы с `SyntaxError` при `initialize()`.
+
 Если после `git pull` странные ошибки API или «старый» фронт — пересоберите с нуля:
 
 ```bash

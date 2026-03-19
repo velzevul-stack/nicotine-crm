@@ -50,7 +50,9 @@ export const AppDataSource = new DataSource({
     SystemSettingsEntity,
     CardEntity,
   ],
-  migrations: ['src/lib/db/migrations/*.ts'],
+  // В production Next запускает обычный Node: TypeORM пытался require() *.ts миграций → SyntaxError.
+  // Миграции выполняйте отдельно: npm run db:migrate (tsx + отдельный DataSource в run-migrations.ts).
+  migrations: [],
   migrationsTableName: 'migrations',
   extra: {
     // Connection pool settings для pg драйвера
