@@ -13,6 +13,26 @@ async function run() {
   try {
     await AppDataSource.initialize();
 
+    const tablesExist = await AppDataSource.query(
+      `SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'users'
+      )`
+    ).then((r: { exists: boolean }[]) => r[0]?.exists);
+
+    if (!tablesExist) {
+      console.log('Таблицы отсутствуют: создаём из entities через synchronize...');
+      const tempDs = new DataSource({
+        ...AppDataSource.options,
+        synchronize: true,
+        migrations: [],
+      });
+      await tempDs.initialize();
+      await tempDs.synchronize();
+      await tempDs.destroy();
+      console.log('Таблицы созданы.');
+    }
+
     const migrationTableExists = await AppDataSource.query(
       `SELECT EXISTS (
         SELECT FROM information_schema.tables
@@ -21,26 +41,6 @@ async function run() {
     ).then((r: { exists: boolean }[]) => r[0]?.exists);
 
     if (!migrationTableExists) {
-      const tablesExist = await AppDataSource.query(
-        `SELECT EXISTS (
-          SELECT FROM information_schema.tables
-          WHERE table_schema = 'public' AND table_name = 'users'
-        )`
-      ).then((r: { exists: boolean }[]) => r[0]?.exists);
-
-      if (!tablesExist) {
-        console.log('Пустая БД: создаём таблицы из entities...');
-        const tempDs = new DataSource({
-          ...AppDataSource.options,
-          synchronize: true,
-          migrations: [],
-        });
-        await tempDs.initialize();
-        await tempDs.synchronize();
-        await tempDs.destroy();
-        console.log('Таблицы созданы.');
-      }
-
       await AppDataSource.query(`
         CREATE TABLE IF NOT EXISTS "migrations" (
           "id" SERIAL NOT NULL,
