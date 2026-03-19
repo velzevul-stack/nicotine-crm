@@ -731,7 +731,7 @@ bot.command('subscribe', async (ctx) => {
           [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
         ],
       },
-    });
+    } as any); // reply_markup supported by Telegram API but omitted in Telegraf types
   } catch (error) {
     console.error('Error sending invoice:', error);
     await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже.');
@@ -1704,7 +1704,7 @@ bot.on('text', async (ctx) => {
             [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
           ],
         },
-      });
+      } as any);
     } catch (error) {
       console.error('Error sending invoice:', error);
       await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже.');
