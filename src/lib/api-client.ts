@@ -20,7 +20,7 @@ export class ApiException extends Error {
 
 export async function api<T>(
   path: string,
-  options: RequestInit & { body?: unknown } = {}
+  options: Omit<RequestInit, 'body'> & { body?: unknown } = {}
 ): Promise<T> {
   const { body, ...rest } = options;
   
