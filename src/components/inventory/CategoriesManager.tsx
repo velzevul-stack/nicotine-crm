@@ -1100,6 +1100,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       required: false,
                       options: [],
                       optionsInput: '',
+                      target: 'custom',
                     });
                   }}
                 >
@@ -1184,6 +1185,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                           required: false,
                           options: [],
                           optionsInput: '',
+                          target: 'custom',
                         });
                       }}
                     >
@@ -1559,6 +1561,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                           required: false,
                           options: [],
                           optionsInput: '',
+                          target: 'custom',
                         });
                       }}
                     >
