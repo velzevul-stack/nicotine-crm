@@ -90,7 +90,7 @@ function CatalogView({
       onSelect(item.id);
       setPath((prev) => prev.slice(0, -1));
     } else {
-      setPath((prev) => [...prev, item]);
+      setPath((prev) => [...prev, item as Category | Brand | ProductFormat]);
     }
   };
 
