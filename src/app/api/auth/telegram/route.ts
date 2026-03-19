@@ -137,26 +137,44 @@ export async function POST(request: NextRequest) {
       await userShopRepo.save(userShop);
     }
 
-    const session = { userId: user.id, shopId: shop.id, telegramId: user.telegramId };
-    
+    const session = {
+      userId: String(user.id),
+      shopId: String(shop.id),
+      telegramId: String(user.telegramId ?? ''),
+    };
+
     // Проверяем подписку после успешного логина
     const userWithSub = await checkUserSubscription(user.id);
     const hasAccess = canAccess(userWithSub);
-    
-    const res = NextResponse.json({ 
+
+    // Явный объект (без spread сущности) — клиент всегда получает accessKey для localStorage
+    const res = NextResponse.json({
       user: {
-        ...user,
-        accessKey: user.accessKey, // Возвращаем accessKey для сохранения в localStorage
-      }, 
-      shop, 
+        id: user.id,
+        telegramId: user.telegramId,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        role: user.role,
+        accessKey: user.accessKey,
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt,
+        subscriptionEndsAt: user.subscriptionEndsAt,
+        referralCode: user.referralCode,
+        referrerId: user.referrerId,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      shop,
       session,
       subscriptionStatus: {
         hasActiveSubscription: userWithSub?.hasActiveSubscription ?? false,
         isTrialExpired: userWithSub?.isTrialExpired ?? false,
         canAccess: hasAccess,
-      }
+      },
     });
-    
+
     res.cookies.set('session', createSignedSession(session), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

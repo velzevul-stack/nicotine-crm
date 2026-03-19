@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getTelegramWebApp, waitForTelegramInitData } from '@/lib/telegram-mini-app';
 
 const STORAGE_KEY = 'telegram_access_key';
 
@@ -46,85 +47,96 @@ export function LoginForm() {
   }, [handleLoginSuccess]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const init = async () => {
-      // Check for Telegram initData
-      if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
+      if (typeof window === 'undefined') return;
+
+      const tgEarly = getTelegramWebApp();
+      if (tgEarly) {
         setIsTelegramApp(true);
-        const tg = (window as any).Telegram.WebApp;
-        const initData = tg.initData;
+        setLoading(true);
+      }
 
-        if (initData) {
-          setLoading(true);
-          try {
-            // Проверяем, есть ли сохраненный ключ в localStorage
-            const savedKey = localStorage.getItem(STORAGE_KEY);
-            
-            if (savedKey) {
-              // Если ключ есть, автоматически входим по нему (для бота)
-              await performLogin(savedKey, true);
-              return;
-            }
+      const initData = await waitForTelegramInitData();
 
-            // Если ключа нет, авторизуемся через Telegram (первый раз)
-            const res = await fetch('/api/auth/telegram', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ initData }),
-            });
-            
-            if (res.ok) {
-              const data = await res.json();
-              
-              // Сохраняем accessKey в localStorage для следующего раза
-              if (data.user?.accessKey) {
-                localStorage.setItem(STORAGE_KEY, data.user.accessKey);
-              }
-              
-              // Проверяем подписку и редиректим соответственно
-              handleLoginSuccess(data.subscriptionStatus);
-              return;
-            } else {
-              toast({
-                title: "Ошибка входа через Telegram",
-                description: "Не удалось авторизоваться автоматически.",
-                variant: "destructive"
-              });
-            }
-          } catch (e) {
-            console.error(e);
-            toast({
-              title: "Ошибка",
-              description: "Произошла ошибка при попытке входа",
-              variant: "destructive"
-            });
-          } finally {
-            setLoading(false);
-          }
-        } else {
-          // Если нет initData, но мы в Telegram, загружаем сохраненный ключ и автоматически входим
-          const savedKey = localStorage.getItem(STORAGE_KEY);
-          if (savedKey) {
-            setLoading(true);
-            try {
-              await performLogin(savedKey, true);
-            } catch (e) {
-              console.error(e);
-              setAccessKey(savedKey);
-              setLoading(false);
-            }
-          }
-        }
-      } else {
-        // Для браузера просто показываем форму логина
-        // Можно загрузить сохраненный ключ для удобства, но не авторизовываться автоматически
+      if (cancelled) return;
+
+      const tg = getTelegramWebApp();
+      if (tg) setIsTelegramApp(true);
+
+      if (!tg) {
+        setLoading(false);
         const savedKey = localStorage.getItem(STORAGE_KEY);
-        if (savedKey) {
+        if (savedKey) setAccessKey(savedKey);
+        return;
+      }
+
+      if (initData) {
+        try {
+          const savedKey = localStorage.getItem(STORAGE_KEY);
+
+          if (savedKey) {
+            await performLogin(savedKey, true);
+            return;
+          }
+
+          const res = await fetch('/api/auth/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            const key = data.user?.accessKey as string | undefined;
+            if (key) {
+              localStorage.setItem(STORAGE_KEY, key);
+              setAccessKey(key);
+            }
+            handleLoginSuccess(data.subscriptionStatus);
+            return;
+          }
+
+          const errJson = await res.json().catch(() => ({}));
+          toast({
+            title: 'Ошибка входа через Telegram',
+            description: (errJson as { message?: string }).message || 'Не удалось авторизоваться автоматически.',
+            variant: 'destructive',
+          });
+        } catch (e) {
+          console.error(e);
+          toast({
+            title: 'Ошибка',
+            description: 'Произошла ошибка при попытке входа',
+            variant: 'destructive',
+          });
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+        return;
+      }
+
+      setLoading(false);
+      const savedKey = localStorage.getItem(STORAGE_KEY);
+      if (savedKey) {
+        setLoading(true);
+        try {
+          await performLogin(savedKey, true);
+        } catch (e) {
+          console.error(e);
           setAccessKey(savedKey);
+        } finally {
+          if (!cancelled) setLoading(false);
         }
       }
     };
-    init();
-  }, [router, toast, performLogin, handleLoginSuccess]);
+
+    void init();
+    return () => {
+      cancelled = true;
+    };
+  }, [toast, performLogin, handleLoginSuccess]);
 
   const handleKeyLogin = async (e: React.FormEvent) => {
     e.preventDefault();
