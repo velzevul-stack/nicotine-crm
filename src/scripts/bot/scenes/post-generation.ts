@@ -16,7 +16,7 @@ import {
   SaleEntity,
   SaleItemEntity,
 } from '@/lib/db/entities';
-import { In } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
 
 export interface PostGenerationState {
@@ -110,7 +110,7 @@ export async function handlePostCallbacks(
     const postFormatRepo = dataSource.getRepository(PostFormatEntity);
     const postFormats = await postFormatRepo.find({
       where: [
-        { isActive: true, shopId: null },
+        { isActive: true, shopId: IsNull() },
         { isActive: true, shopId: userShopId },
       ],
       order: { createdAt: 'DESC' },
@@ -218,7 +218,7 @@ export async function handlePostCallbacks(
           shopRepo.findOne({ where: { id: userShopId } }),
           postFormatRepo.find({
             where: [
-              { isActive: true, shopId: null },
+              { isActive: true, shopId: IsNull() },
               { isActive: true, shopId: userShopId },
             ],
             order: { createdAt: 'DESC' },

@@ -12,7 +12,7 @@ import {
   SaleEntity,
   SaleItemEntity,
 } from '@/lib/db/entities';
-import { In } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 import {
   renderTemplate,
   PostData,
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
       // Get format: either global (shopId is null) or shop-specific
       return postFormatRepo.findOne({
         where: [
-          { id: postFormatId, isActive: true, shopId: null },
+          { id: postFormatId, isActive: true, shopId: IsNull() },
           { id: postFormatId, isActive: true, shopId: session.shopId },
         ],
       });

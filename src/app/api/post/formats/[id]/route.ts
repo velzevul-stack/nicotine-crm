@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { IsNull } from 'typeorm';
 import { getDataSource } from '@/lib/db/data-source';
 import { PostFormatEntity } from '@/lib/db/entities';
 import { getSession } from '@/lib/auth';
+import { checkUserSubscription } from '@/lib/auth-utils';
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +20,7 @@ export async function GET(
 
   const format = await formatRepo.findOne({
     where: [
-      { id, shopId: null },
+      { id, shopId: IsNull() },
       { id, shopId: session.shopId },
     ],
   });
@@ -50,7 +52,7 @@ export async function PATCH(
     // Find format - only allow editing shop-specific formats or global formats (for admins)
     const format = await formatRepo.findOne({
       where: [
-        { id, shopId: null },
+        { id, shopId: IsNull() },
         { id, shopId: session.shopId },
       ],
     });
@@ -59,8 +61,11 @@ export async function PATCH(
       return NextResponse.json({ message: 'Format not found' }, { status: 404 });
     }
 
+    const userWithSub = await checkUserSubscription(session.userId);
+    const isAdmin = userWithSub?.role === 'admin';
+
     // Only allow editing shop-specific formats (not global)
-    if (format.shopId === null && session.role !== 'admin') {
+    if (format.shopId === null && !isAdmin) {
       return NextResponse.json(
         { message: 'Cannot edit global formats' },
         { status: 403 }
@@ -108,7 +113,7 @@ export async function DELETE(
 
     const format = await formatRepo.findOne({
       where: [
-        { id, shopId: null },
+        { id, shopId: IsNull() },
         { id, shopId: session.shopId },
       ],
     });
@@ -117,8 +122,11 @@ export async function DELETE(
       return NextResponse.json({ message: 'Format not found' }, { status: 404 });
     }
 
+    const userWithSub = await checkUserSubscription(session.userId);
+    const isAdmin = userWithSub?.role === 'admin';
+
     // Only allow deleting shop-specific formats (not global)
-    if (format.shopId === null && session.role !== 'admin') {
+    if (format.shopId === null && !isAdmin) {
       return NextResponse.json(
         { message: 'Cannot delete global formats' },
         { status: 403 }

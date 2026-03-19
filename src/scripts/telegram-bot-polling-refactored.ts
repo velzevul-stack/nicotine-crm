@@ -12,7 +12,7 @@
 import dotenv from 'dotenv';
 import { Telegraf, Context } from 'telegraf';
 import { Client } from 'pg';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { UserEntity, PostFormatEntity, UserShopEntity } from '@/lib/db/entities';
 import {
   ShopEntity,
@@ -190,7 +190,7 @@ async function showPostMenu(ctx: any, userId: number, userShopId: string) {
       stockRepo.find({ where: { shopId: userShopId } }),
       postFormatRepo.find({
         where: [
-          { isActive: true, shopId: null },
+          { isActive: true, shopId: IsNull() },
           { isActive: true, shopId: userShopId },
         ],
         order: { createdAt: 'DESC' },
@@ -721,7 +721,7 @@ bot.command('listformats', async (ctx) => {
 
   const formats = await formatRepo.find({
     where: [
-      { isActive: true, shopId: null },
+      { isActive: true, shopId: IsNull() },
       { isActive: true, shopId: userShop.shopId },
     ],
     order: { createdAt: 'DESC' },
@@ -777,7 +777,7 @@ bot.command('editformat', async (ctx) => {
 
   const format = await formatRepo.findOne({
     where: [
-      { id: formatId, shopId: null },
+      { id: formatId, shopId: IsNull() },
       { id: formatId, shopId: userShop.shopId },
     ],
   });
@@ -837,7 +837,7 @@ bot.command('deleteformat', async (ctx) => {
 
   const format = await formatRepo.findOne({
     where: [
-      { id: formatId, shopId: null },
+      { id: formatId, shopId: IsNull() },
       { id: formatId, shopId: userShop.shopId },
     ],
   });
@@ -982,7 +982,7 @@ bot.on('text', async (ctx) => {
 
     const formats = await formatRepo.find({
       where: [
-        { isActive: true, shopId: null },
+        { isActive: true, shopId: IsNull() },
         { isActive: true, shopId: userShop.shopId },
       ],
       order: { createdAt: 'DESC' },
