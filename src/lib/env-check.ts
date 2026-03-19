@@ -26,7 +26,7 @@ export function checkProductionEnv(): void {
   if (!process.env.DB_NAME) errors.push('DB_NAME: обязателен');
 
   if (!process.env.TELEGRAM_BOT_TOKEN) {
-    errors.push('TELEGRAM_BOT_TOKEN: обязателен для авторизации и webhook');
+    errors.push('TELEGRAM_BOT_TOKEN: обязателен для авторизации и polling');
   }
 
   if (!process.env.TELEGRAM_MINI_APP_URL) {
@@ -45,15 +45,7 @@ export function checkProductionEnv(): void {
     errors.push('CRON_SECRET: нельзя использовать значение по умолчанию из .env.example');
   }
 
-  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!webhookSecret || webhookSecret.length < 32) {
-    errors.push(
-      'TELEGRAM_WEBHOOK_SECRET: обязателен в production для защиты webhook (минимум 32 символа). Сгенерируйте: openssl rand -hex 32'
-    );
-  }
-  if (webhookSecret === 'your-webhook-secret-min-32-chars') {
-    errors.push('TELEGRAM_WEBHOOK_SECRET: нельзя использовать значение по умолчанию из .env.example');
-  }
+  // TELEGRAM_WEBHOOK_SECRET не требуется при использовании polling (без webhook)
 
   if (errors.length > 0) {
     throw new Error(
