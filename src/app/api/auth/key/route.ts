@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { UserEntity, ShopEntity, UserShopEntity } from '@/lib/db/entities';
 import { checkAuthRateLimit } from '@/lib/rate-limit';
-import { createSignedSession } from '@/lib/auth';
+import { createSignedSession } from '@/lib/session-token';
 // import { checkUserSubscription, canAccess } from '@/lib/auth-utils'; // Используем упрощенную проверку
 import { z } from 'zod';
 

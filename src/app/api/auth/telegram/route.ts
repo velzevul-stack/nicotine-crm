@@ -7,6 +7,7 @@ import { ShopEntity, type Shop } from '@/lib/db/entities/Shop';
 import { UserShopEntity } from '@/lib/db/entities/UserShop';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import { checkUserSubscription, canAccess } from '@/lib/auth-utils';
+import { createSignedSession } from '@/lib/session-token';
 
 function validateInitData(initData: string, botToken: string): Record<string, string> | null {
   const params = new URLSearchParams(initData);
@@ -156,8 +157,6 @@ export async function POST(request: NextRequest) {
       }
     });
     
-    // Используем подписанную сессию
-    const { createSignedSession } = require('@/lib/auth');
     res.cookies.set('session', createSignedSession(session), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

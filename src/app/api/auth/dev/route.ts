@@ -7,6 +7,7 @@ import { checkAuthRateLimit } from '@/lib/rate-limit';
 import { getDataSource } from '@/lib/db/data-source';
 import { UserEntity, ShopEntity, UserShopEntity, type Shop } from '@/lib/db/entities';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
+import { createSignedSession } from '@/lib/session-token';
 
 export async function POST(request: NextRequest) {
   if (process.env.NODE_ENV !== 'development') {
@@ -103,8 +104,6 @@ export async function POST(request: NextRequest) {
   const session = { userId: user.id, shopId: shop.id, telegramId: user.telegramId };
   const res = NextResponse.json({ user, shop, session });
   
-  // Используем подписанную сессию
-  const { createSignedSession } = require('@/lib/auth');
   res.cookies.set('session', createSignedSession(session), {
     httpOnly: true,
     secure: false,
