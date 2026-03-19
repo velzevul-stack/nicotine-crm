@@ -302,7 +302,7 @@ export function Sales() {
     if ((effectivePaymentType === 'card' || effectivePaymentType === 'split') && selectedCardId) {
       payload.cardId = selectedCardId;
     }
-    createSale.mutate(payload as CreateSalePayload);
+    createSale.mutate(payload as unknown as CreateSalePayload);
   };
 
   const paymentOptions = [
