@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:generate": "typeorm-ts-node-commonjs migration:generate -d src/lib/db/data-source.ts",
-    "db:migrate": "typeorm-ts-node-commonjs migration:run -d src/lib/db/data-source.ts",
+    "db:migrate": "tsx src/scripts/run-migrations.ts",
     "db:seed": "tsx src/scripts/seed.ts",
     "db:clear": "tsx src/scripts/clear-db.ts",
     "db:fix-brands": "tsx src/scripts/fix-brand-sort-order.ts",
