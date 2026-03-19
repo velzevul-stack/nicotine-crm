@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
           unitPrice,
           isLiquid,
           strengthLabel: normalizedStrength,
-          customValues: formatCustomValues,
+          customValues: formatCustomValues ?? undefined,
         });
         await em.getRepository(ProductFormatEntity).save(format);
       } else {
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
         productFormatId: fmtId,
         name: finalFlavorName || flavorSearchName,
         barcode: barcode || null,
-        customValues: flavorCustomValues,
+        customValues: flavorCustomValues ?? undefined,
       });
       await em.getRepository(FlavorEntity).save(flavor);
     } else {
