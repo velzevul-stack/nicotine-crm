@@ -86,31 +86,47 @@ export function Profile() {
               key="grid"
               initial={reduceMotion ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
-              transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.25, 0.1, 0.25, 1] }}
               className="grid grid-cols-2 gap-3"
             >
-              {sections.map((section) => {
+              {sections.map((section, index) => {
                 const Icon = section.icon;
                 return (
-                  <button
+                  <motion.button
                     key={section.id}
                     type="button"
                     onClick={() => handleSectionClick(section.id)}
-                    className="bg-[#151922] rounded-[20px] p-5 flex flex-col items-start gap-3 active:scale-[0.98] transition-transform duration-150 relative overflow-hidden"
+                    initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : {
+                            delay: index * 0.03,
+                            duration: 0.28,
+                            ease: [0.25, 0.1, 0.25, 1],
+                          }
+                    }
+                    whileHover={
+                      reduceMotion
+                        ? undefined
+                        : { y: -2, transition: { duration: 0.2, ease: 'easeOut' } }
+                    }
+                    whileTap={
+                      reduceMotion
+                        ? undefined
+                        : { scale: 0.98, transition: { duration: 0.12, ease: 'easeOut' } }
+                    }
+                    className="relative bg-[#151922] rounded-[20px] p-5 flex flex-col items-start gap-3 text-left border border-white/[0.06] shadow-sm hover:border-white/[0.1] hover:shadow-md transition-[border-color,box-shadow] duration-200"
                   >
-                    {/* Без blur — filter: blur очень дорог на мобильных GPU */}
                     <div
-                      className="absolute -top-4 -right-4 w-20 h-20 rounded-full opacity-[0.12] pointer-events-none"
-                      style={{ backgroundColor: section.color }}
-                    />
-                    <div
-                      className="p-3 rounded-[14px] relative z-10"
-                      style={{ backgroundColor: `${section.color}20` }}
+                      className="p-3 rounded-[14px]"
+                      style={{ backgroundColor: `${section.color}18` }}
                     >
                       <Icon size={22} strokeWidth={1.5} style={{ color: section.color }} />
                     </div>
-                    <div className="flex-1 relative z-10">
+                    <div className="flex-1 min-w-0">
                       <h3 className="text-[#F5F5F7] font-semibold text-sm text-left">
                         {section.label}
                       </h3>
@@ -128,21 +144,21 @@ export function Profile() {
                     </div>
                     <ChevronRight
                       size={18}
-                      className="text-[#6B7280] absolute bottom-4 right-4"
+                      className="text-[#6B7280] absolute bottom-4 right-4 shrink-0"
                       strokeWidth={1.5}
                     />
-                  </button>
+                  </motion.button>
                 );
               })}
             </motion.div>
           ) : (
             <motion.div
               key={`section-${activeSection}`}
-              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-              transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
-              className="bg-[#151922] rounded-[20px] overflow-hidden"
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+              className="bg-[#151922] rounded-[20px] overflow-hidden border border-white/[0.06]"
             >
               <div
                 className="px-5 py-4 border-b"
@@ -151,9 +167,12 @@ export function Profile() {
                   background: `linear-gradient(135deg, ${activeData?.color}15 0%, transparent 100%)`,
                 }}
               >
-                <button
+                <motion.button
+                  type="button"
                   onClick={() => setActiveSection(null)}
-                  className="flex items-center gap-2 text-[#F5F5F7] active:scale-95 transition-transform"
+                  whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="flex items-center gap-2 text-[#F5F5F7] rounded-lg -m-1 p-1 hover:bg-white/[0.04] transition-colors"
                 >
                   <ArrowLeft size={20} strokeWidth={1.5} />
                   <span className="font-semibold">Назад</span>
@@ -161,9 +180,9 @@ export function Profile() {
               </div>
 
               <motion.div
-                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
+                transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.25, 0.1, 0.25, 1] }}
                 className="p-5"
               >
                 {activeSection === 'settings' && <SettingsTab />}
