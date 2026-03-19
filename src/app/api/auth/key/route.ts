@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { UserEntity, ShopEntity, UserShopEntity } from '@/lib/db/entities';
 import { checkAuthRateLimit } from '@/lib/rate-limit';
+import { createSignedSession } from '@/lib/auth';
 // import { checkUserSubscription, canAccess } from '@/lib/auth-utils'; // Используем упрощенную проверку
 import { z } from 'zod';
 
@@ -148,7 +149,6 @@ export async function POST(request: NextRequest) {
     });
     
     // Используем подписанную сессию
-    const { createSignedSession } = require('@/lib/auth');
     res.cookies.set('session', createSignedSession(session), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
