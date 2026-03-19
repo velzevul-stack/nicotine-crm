@@ -377,11 +377,13 @@ export function Sales() {
           </TabsContent>
 
           <TabsContent value="catalog" className="mt-0">
-            <CatalogView
-              inventory={inventoryData}
-              onSelect={addToCart}
-              reservedFlavorIds={reservedFlavorIds}
-            />
+            {inventoryData && (
+              <CatalogView
+                inventory={inventoryData}
+                onSelect={addToCart}
+                reservedFlavorIds={reservedFlavorIds}
+              />
+            )}
           </TabsContent>
         </Tabs>
 
