@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
 import { CategoryEntity, BrandEntity, type CategoryField } from '@/lib/db/entities';
+import { ensureDefaultCategoriesForShop } from '@/lib/db/ensure-default-categories';
 import { z } from 'zod';
 
 const categoryFieldSchema = z.object({
@@ -38,6 +39,8 @@ export async function GET() {
 
   const ds = await getDataSource();
   const categoryRepo = ds.getRepository(CategoryEntity);
+
+  await ensureDefaultCategoriesForShop(ds, session.shopId);
 
   const categories = await categoryRepo.find({
     where: { shopId: session.shopId },

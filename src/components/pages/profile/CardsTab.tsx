@@ -98,23 +98,24 @@ export function CardsTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 w-full min-w-0 sm:flex-row sm:items-stretch">
         <input
           type="text"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           placeholder="Название карты"
-          className="flex-1 h-10 px-4 rounded-xl bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm placeholder:text-[#6B7280]"
+          className="w-full min-w-0 h-10 px-4 rounded-xl bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm placeholder:text-[#6B7280] sm:flex-1"
         />
         <motion.button
+          type="button"
           whileTap={{ scale: 0.97 }}
           onClick={handleAdd}
           disabled={!newName.trim() || createMutation.isPending}
-          className="h-10 px-4 rounded-xl bg-[#BFE7E5]/30 text-[#BFE7E5] text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+          className="h-10 shrink-0 px-4 rounded-xl bg-[#BFE7E5]/30 text-[#BFE7E5] text-sm font-medium inline-flex items-center justify-center gap-2 disabled:opacity-50 sm:w-auto w-full"
         >
-          <Plus size={18} />
-          Добавить
+          <Plus size={18} className="shrink-0" />
+          <span className="whitespace-nowrap">Добавить</span>
         </motion.button>
       </div>
 

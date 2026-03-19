@@ -8,6 +8,7 @@ import { UserShopEntity } from '@/lib/db/entities/UserShop';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import { checkUserSubscription, canAccess } from '@/lib/auth-utils';
 import { createSignedSession } from '@/lib/session-token';
+import { ensureDefaultCategoriesForShop } from '@/lib/db/ensure-default-categories';
 
 function validateInitData(initData: string, botToken: string): Record<string, string> | null {
   const params = new URLSearchParams(initData);
@@ -136,6 +137,8 @@ export async function POST(request: NextRequest) {
       });
       await userShopRepo.save(userShop);
     }
+
+    await ensureDefaultCategoriesForShop(ds, shop.id);
 
     const session = {
       userId: String(user.id),

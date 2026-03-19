@@ -227,7 +227,7 @@ export function Inventory() {
         {items.length === 0 && !search && !hasActiveFilters && (
           <div className="p-4 border border-dashed border-primary/30 rounded-xl bg-primary/5 text-center space-y-2">
             <p className="text-sm font-medium">Ваш склад пуст</p>
-            <p className="text-xs text-muted-foreground">Добавьте товары через кнопку «Приём товара» или используйте команду <code className="px-1 py-0.5 bg-secondary rounded text-xs">npm run db:seed</code> для загрузки тестовых данных</p>
+            <p className="text-xs text-muted-foreground">Добавьте товары через раздел «Приём товара» в меню приложения.</p>
           </div>
         )}
 
