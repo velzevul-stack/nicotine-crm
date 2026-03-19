@@ -183,7 +183,7 @@ export function Sales() {
           flavorId,
           name: flavor.name,
           productName: `${brand.name} ${format.name}`,
-          unitPrice: format.unitPrice,
+          unitPrice: format.unitPrice ?? 0,
           quantity: 1,
         },
       ]);
