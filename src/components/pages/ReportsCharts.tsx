@@ -205,7 +205,7 @@ const PaymentPieChart = memo(({ data, currency }: { data: PaymentData[]; currenc
         cy="50%"
         labelLine={false}
         label={({ name, percent }) => 
-          percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ''
+          (percent ?? 0) > 0.05 ? `${((percent ?? 0) * 100).toFixed(0)}%` : ''
         }
         outerRadius={70}
         fill="#8884d8"
