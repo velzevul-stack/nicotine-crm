@@ -1,7 +1,7 @@
 import { getDataSource } from '@/lib/db/data-source';
-import { UserEntity } from '@/lib/db/entities';
+import { UserEntity, type User } from '@/lib/db/entities';
 
-export interface UserWithSubscription extends UserEntity {
+export interface UserWithSubscription extends User {
   hasActiveSubscription: boolean;
   isTrialExpired: boolean;
 }

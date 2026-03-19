@@ -1,4 +1,4 @@
-export { UserEntity } from './User';
+export { UserEntity, type User } from './User';
 export { ShopEntity } from './Shop';
 export { UserShopEntity } from './UserShop';
 export { CategoryEntity } from './Category';
