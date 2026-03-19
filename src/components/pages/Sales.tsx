@@ -365,7 +365,7 @@ export function Sales() {
                             </p>
                           </div>
                           <span className="font-mono-nums text-sm text-primary font-semibold ml-3">
-                            {formatCurrency(format.unitPrice, shopData?.currency)}
+                            {formatCurrency(format.unitPrice ?? 0, shopData?.currency)}
                           </span>
                         </button>
                       );
