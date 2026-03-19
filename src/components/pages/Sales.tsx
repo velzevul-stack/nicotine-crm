@@ -143,7 +143,7 @@ export function Sales() {
               ? brands.find((b) => b.id === format.brandId)
               : null;
             const combined = `${brand?.name || ''} ${format?.name || ''} ${f.name}`.toLowerCase();
-            return combined.includes(search.toLowerCase()) && f.quantity > 0;
+            return combined.includes(search.toLowerCase()) && (f.quantity ?? 0) > 0;
           })
           .slice(0, 8)
       : [];
