@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Store, CreditCard, Package, Crown, Users, ChevronRight, ArrowLeft, Wallet, BarChart3, Truck } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -20,14 +20,20 @@ type Section = 'settings' | 'debts' | 'reserves' | 'cards' | 'reports' | 'delive
 export function Profile() {
   const [mounted, setMounted] = useState(false);
   const [activeSection, setActiveSection] = useState<Section | null>(null);
+  const reduceMotion = useReducedMotion();
 
+  // После mount: сначала отрисовка сетки, потом запросы — меньше конкуренции с анимацией на слабых телефонах
   const { data: debtsData } = useQuery({
     queryKey: ['debts'],
     queryFn: () => api<unknown[]>('/api/debts'),
+    enabled: mounted,
+    staleTime: 60_000,
   });
   const { data: reservesData } = useQuery({
     queryKey: ['reserves'],
     queryFn: () => api<unknown[]>('/api/reserves'),
+    enabled: mounted,
+    staleTime: 60_000,
   });
 
   const debtsCount = Array.isArray(debtsData) ? debtsData.length : 0;
@@ -61,7 +67,7 @@ export function Profile() {
         <div className="px-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-              <div key={i} className="h-32 bg-[#151922] rounded-[20px] animate-pulse" />
+              <div key={i} className="h-32 bg-[#151922] rounded-[20px]" />
             ))}
           </div>
         </div>
@@ -78,24 +84,24 @@ export function Profile() {
           {!activeSection ? (
             <motion.div
               key="grid"
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98 }}
+              transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
               className="grid grid-cols-2 gap-3"
             >
-              {sections.map((section, index) => {
+              {sections.map((section) => {
                 const Icon = section.icon;
                 return (
-                  <motion.button
+                  <button
                     key={section.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, delay: index * 0.05 }}
+                    type="button"
                     onClick={() => handleSectionClick(section.id)}
-                    className="bg-[#151922] rounded-[20px] p-5 flex flex-col items-start gap-3 active:scale-[0.98] transition-transform relative overflow-hidden"
+                    className="bg-[#151922] rounded-[20px] p-5 flex flex-col items-start gap-3 active:scale-[0.98] transition-transform duration-150 relative overflow-hidden"
                   >
+                    {/* Без blur — filter: blur очень дорог на мобильных GPU */}
                     <div
-                      className="absolute top-0 right-0 w-24 h-24 rounded-full blur-3xl opacity-10"
+                      className="absolute -top-4 -right-4 w-20 h-20 rounded-full opacity-[0.12] pointer-events-none"
                       style={{ backgroundColor: section.color }}
                     />
                     <div
@@ -125,17 +131,17 @@ export function Profile() {
                       className="text-[#6B7280] absolute bottom-4 right-4"
                       strokeWidth={1.5}
                     />
-                  </motion.button>
+                  </button>
                 );
               })}
             </motion.div>
           ) : (
             <motion.div
               key={`section-${activeSection}`}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.25 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+              transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
               className="bg-[#151922] rounded-[20px] overflow-hidden"
             >
               <div
@@ -155,9 +161,9 @@ export function Profile() {
               </div>
 
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: 0.1 }}
+                transition={{ duration: reduceMotion ? 0 : 0.18, ease: 'easeOut' }}
                 className="p-5"
               >
                 {activeSection === 'settings' && <SettingsTab />}
