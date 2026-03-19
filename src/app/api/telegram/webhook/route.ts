@@ -744,7 +744,7 @@ bot.on('pre_checkout_query', async (ctx) => {
   
   // Проверяем payload
   if (!query.invoice_payload.startsWith('subscription_')) {
-    await ctx.answerPreCheckoutQuery(false, { error_message: 'Неверный тип платежа' });
+    await ctx.answerPreCheckoutQuery(false, 'Неверный тип платежа');
     return;
   }
 
