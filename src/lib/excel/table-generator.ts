@@ -330,7 +330,7 @@ export async function generateStockTable(
         if (fs.existsSync(resolvedPath)) {
           try {
             const ext = path.extname(resolvedPath).toLowerCase();
-            const extension = ext === '.png' ? 'png' : ext === '.webp' ? 'webp' : 'jpeg';
+            const extension: 'png' | 'jpeg' | 'gif' = ext === '.png' ? 'png' : ext === '.webp' ? 'jpeg' : 'jpeg';
             const imageId = wb.addImage({
               filename: resolvedPath,
               extension,
@@ -339,7 +339,7 @@ export async function generateStockTable(
             if (rowNum && rowNum > 0) {
               const dim = getImageDimensions(resolvedPath);
               ws.addImage(imageId, {
-                tl: { col: 1, row: rowNum - 1, colOff: 0, rowOff: 0 },
+                tl: { col: 1, row: rowNum - 1 },
                 ext: { width: dim.width, height: dim.height },
                 editAs: 'oneCell',
               });
@@ -358,7 +358,8 @@ export async function generateStockTable(
 
 function getImageDimensions(filePath: string): { width: number; height: number } {
   try {
-    const buf = fs.readFileSync(filePath, { start: 0, end: 65536 });
+    const full = fs.readFileSync(filePath);
+    const buf = full.length > 65536 ? full.subarray(0, 65536) : full;
     const ext = path.extname(filePath).toLowerCase();
     let w = 0, h = 0;
     if (ext === '.png' && buf.length >= 24) {

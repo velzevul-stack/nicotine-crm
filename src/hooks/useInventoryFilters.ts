@@ -33,21 +33,24 @@ export function useInventoryFilters() {
   const pathname = usePathname();
 
   // Читаем фильтры из URL
-  const filters = useMemo<InventoryFilters>(() => ({
-    inStockOnly: searchParams.get('inStockOnly') === '1',
-    noBarcode: searchParams.get('noBarcode') === '1',
-    showReservedOnly: searchParams.get('showReservedOnly') === '1',
-    selectedCategory: searchParams.get('categoryId') || null,
-    selectedStrength: searchParams.get('strength') || null,
-    selectedBrand: searchParams.get('brandId') || null,
-    selectedColor: searchParams.get('color') || null,
-    minPrice: searchParams.get('minPrice') || '',
-    maxPrice: searchParams.get('maxPrice') || '',
-  }), [searchParams]);
+  const filters = useMemo<InventoryFilters>(() => {
+    const sp = searchParams ?? new URLSearchParams();
+    return {
+      inStockOnly: sp.get('inStockOnly') === '1',
+      noBarcode: sp.get('noBarcode') === '1',
+      showReservedOnly: sp.get('showReservedOnly') === '1',
+      selectedCategory: sp.get('categoryId') || null,
+      selectedStrength: sp.get('strength') || null,
+      selectedBrand: sp.get('brandId') || null,
+      selectedColor: sp.get('color') || null,
+      minPrice: sp.get('minPrice') || '',
+      maxPrice: sp.get('maxPrice') || '',
+    };
+  }, [searchParams]);
 
   // Обновляем фильтры через URL
   const updateFilters = useCallback((updates: Partial<InventoryFilters>) => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
     
     // Обновляем параметры
     if (updates.inStockOnly !== undefined) {
@@ -87,12 +90,12 @@ export function useInventoryFilters() {
       else params.delete('maxPrice');
     }
 
-    router.push(`${pathname}?${params.toString()}`);
+    router.push(`${pathname ?? ''}?${params.toString()}`);
   }, [searchParams, router, pathname]);
 
   // Сброс всех фильтров
   const resetFilters = useCallback(() => {
-    router.push(pathname);
+    router.push(pathname ?? '/');
   }, [router, pathname]);
 
   // Проверка наличия активных фильтров
