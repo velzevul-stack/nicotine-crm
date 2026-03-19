@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
-import { UserEntity, ShopEntity, UserShopEntity } from '@/lib/db/entities';
+import { UserEntity, ShopEntity, UserShopEntity, type User } from '@/lib/db/entities';
 import { checkAuthRateLimit } from '@/lib/rate-limit';
 import { createSignedSession } from '@/lib/session-token';
 // import { checkUserSubscription, canAccess } from '@/lib/auth-utils'; // Используем упрощенную проверку
@@ -10,13 +10,42 @@ const schema = z.object({
   accessKey: z.string().min(5),
 });
 
+/** Плоский JSON для ответа (без скрытых полей TypeORM / ссылок на сущности). */
+function userToLoginJson(user: User) {
+  const d = (v: Date | null | undefined) =>
+    v == null ? null : v instanceof Date ? v.toISOString() : String(v);
+  return {
+    id: user.id,
+    telegramId: user.telegramId,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    username: user.username,
+    role: user.role,
+    accessKey: user.accessKey,
+    subscriptionStatus: user.subscriptionStatus,
+    trialEndsAt: d(user.trialEndsAt),
+    subscriptionEndsAt: d(user.subscriptionEndsAt),
+    referralCode: user.referralCode,
+    referrerId: user.referrerId,
+    isActive: user.isActive,
+    createdAt: d(user.createdAt),
+    updatedAt: d(user.updatedAt),
+  };
+}
+
 export async function POST(request: NextRequest) {
   const rateLimitResponse = checkAuthRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
   const startTime = Date.now();
   try {
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch (parseErr) {
+      console.error('[auth/key] Invalid JSON body:', parseErr);
+      return NextResponse.json({ message: 'Invalid request body' }, { status: 400 });
+    }
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ message: 'Authentication failed' }, { status: 400 });
@@ -122,7 +151,11 @@ export async function POST(request: NextRequest) {
       }));
     }
 
-    const session = { userId: user.id, shopId: userShop.shopId, telegramId: user.telegramId };
+    const session = {
+      userId: String(user.id),
+      shopId: String(userShop.shopId),
+      telegramId: String(user.telegramId ?? ''),
+    };
     
     // Проверяем подписку после успешного логина (упрощенная проверка без транзакции)
     const now = new Date();
@@ -138,18 +171,19 @@ export async function POST(request: NextRequest) {
     // Админы всегда имеют доступ
     const hasAccess = user.role === 'admin' || (user.isActive && hasActiveSubscription);
     
-    const res = NextResponse.json({ 
-      user, 
+    const signed = createSignedSession(session);
+
+    const res = NextResponse.json({
+      user: userToLoginJson(user),
       session,
       subscriptionStatus: {
         hasActiveSubscription,
         isTrialExpired,
         canAccess: hasAccess,
-      }
+      },
     });
-    
-    // Используем подписанную сессию
-    res.cookies.set('session', createSignedSession(session), {
+
+    res.cookies.set('session', signed, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -158,9 +192,12 @@ export async function POST(request: NextRequest) {
     });
 
     return res;
-  } catch (e: any) {
-    console.error('[auth/key] Error after', Date.now() - startTime, 'ms:', e);
-    const errorMessage = e?.message || 'Internal server error';
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error('[auth/key] Error after', Date.now() - startTime, 'ms:', msg);
+    if (stack) console.error('[auth/key] stack:\n', stack);
+    const errorMessage = msg || 'Internal server error';
     return NextResponse.json({ 
       message: errorMessage.includes('timeout') ? 'Request timeout. Please try again.' : 'Internal server error' 
     }, { status: 500 });
