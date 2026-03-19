@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
-import { SaleEntity, SaleItemEntity, CardEntity } from '@/lib/db/entities';
+import { SaleEntity, SaleItemEntity, CardEntity, type Sale, type SaleItem } from '@/lib/db/entities';
 import { In } from 'typeorm';
 import { format, startOfDay, endOfDay, subDays } from 'date-fns';
 
@@ -112,8 +112,8 @@ export async function GET(request: NextRequest) {
         };
       })
       .filter(Boolean) as Array<
-      SaleEntity & {
-        items: SaleItemEntity[];
+      Sale & {
+        items: SaleItem[];
         calculatedCost: number;
         calculatedProfit: number;
         finalAmount: number;

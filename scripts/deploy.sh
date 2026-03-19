@@ -30,7 +30,7 @@ else
 fi
 
 # 5. Перезапуск PM2
-echo ">>> pm2 restart telegram-seller"
-pm2 restart telegram-seller || pm2 start ecosystem.config.js
+echo ">>> pm2 restart telegram-seller telegram-bot-polling"
+pm2 restart telegram-seller telegram-bot-polling || pm2 start ecosystem.config.js
 
 echo "=== Deploy завершён ==="

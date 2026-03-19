@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     where: { userId: user.id },
   });
 
-  let shop: ShopEntity | null = null;
+  let shop: Shop | null = null;
   if (userShop) {
     shop = await shopRepo.findOne({ where: { id: userShop.shopId } });
   }
