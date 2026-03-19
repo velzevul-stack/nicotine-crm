@@ -277,7 +277,7 @@ export default function AdminStatsPage() {
                 <div key={item.name} className="flex justify-between text-sm">
                   <span>{item.name}:</span>
                   <span className="font-medium">
-                    {item.count} пользователей • {item.actions} действий • {item.sessions} сессий
+                    {item.value} пользователей • {item.actions} действий • {item.sessions} сессий
                   </span>
                 </div>
               ))}
