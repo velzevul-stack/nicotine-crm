@@ -22,7 +22,7 @@ const bot = new Telegraf(botToken);
 bot.catch((err, ctx) => {
   console.error('[Bot] Error occurred:', err);
   console.error('[Bot] Update:', ctx.update);
-  console.error('[Bot] Error stack:', err.stack);
+  console.error('[Bot] Error stack:', err instanceof Error ? err.stack : String(err));
   
   // Отправляем сообщение пользователю об ошибке
   ctx.reply('❌ Произошла ошибка при обработке запроса. Попробуйте позже или обратитесь в поддержку.').catch(() => {
