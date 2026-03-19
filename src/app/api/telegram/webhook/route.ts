@@ -1261,7 +1261,7 @@ bot.on('message', async (ctx, next) => {
 
     // Удаляем статус сообщение и отправляем результат
     try {
-      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+      ctx.chat && await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
     } catch (e) {}
 
     const skippedUsers = allUsers.length - validUsers.length;
@@ -1382,7 +1382,7 @@ bot.on('text', async (ctx) => {
 
       // Удаляем статус сообщение и отправляем результат
       try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+        ctx.chat && await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
       } catch (e) {}
 
       const skippedUsers = allUsers.length - validUsers.length;
@@ -1443,7 +1443,7 @@ bot.on('text', async (ctx) => {
 
     // Удаляем статус сообщение и отправляем результат
     try {
-      await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
+      ctx.chat && await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id);
     } catch (e) {}
 
     const skippedUsers = allUsers.length - validUsers.length;
@@ -2646,7 +2646,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
       const postText = renderTemplate(template, postData, formatConfig);
 
       try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+        ctx.chat && await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
       } catch (e) {}
 
       if (!postText || postText.trim().length === 0) {
@@ -2660,7 +2660,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     } catch (error) {
       console.error('Error generating preview:', error);
       try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+        if (ctx.chat) await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
       } catch (e) {}
       await ctx.reply('❌ Ошибка при генерации предпросмотра.');
     }
@@ -2836,7 +2836,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
       const postText = renderTemplate(template, postData, formatConfig);
 
       try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+        ctx.chat && await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
       } catch (e) {}
 
       if (!postText || postText.trim().length === 0) {
@@ -2849,7 +2849,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     } catch (error) {
       console.error('Error generating post:', error);
       try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+        ctx.chat && await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
       } catch (e) {}
       await ctx.reply('❌ Ошибка при генерации поста.');
     }
