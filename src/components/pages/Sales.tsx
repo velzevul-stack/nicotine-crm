@@ -717,7 +717,7 @@ function CatalogView({ inventory, onSelect, reservedFlavorIds }: { inventory: In
       // Фильтруем товары: скрываем те, что в резервах, и показываем только с количеством > 0
       return inventory?.flavors.filter((f) => 
         f.productFormatId === path[2].id && 
-        f.quantity > 0 && 
+        (f.quantity ?? 0) > 0 && 
         !reservedFlavorIds.has(f.id)
       ) || [];
     }
