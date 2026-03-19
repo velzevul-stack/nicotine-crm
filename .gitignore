@@ -16,6 +16,8 @@ node_modules
 dist
 dist-ssr
 .next/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
 *.local
 
 # SSL certificates (local development)

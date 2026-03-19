@@ -72,9 +72,11 @@ nano .env
 | `TELEGRAM_BOT_TOKEN` | Токен от BotFather |
 | `TELEGRAM_BOT_USERNAME` | Username бота |
 | `TELEGRAM_MINI_APP_URL` | `https://ваш-домен.com` |
-| `TELEGRAM_WEBHOOK_URL` | `https://ваш-домен.com/api/telegram/webhook` |
-| `TELEGRAM_WEBHOOK_SECRET` | Секрет для проверки webhook (32+ символов). Генерация: `openssl rand -hex 32` |
+| `TELEGRAM_WEBHOOK_URL` | Только если бот на **webhook** (см. ниже). Иначе можно не задавать. |
+| `TELEGRAM_WEBHOOK_SECRET` | Обязателен при использовании webhook (32+ символов). При **long polling** (PM2 `telegram-bot-polling`) не нужен. |
 | `CRON_SECRET` | Секрет для cron. Генерация: `openssl rand -hex 32` |
+
+В `.env` не дублируйте одни и те же переменные — сработает непредсказуемое значение.
 
 ## 4. Установка и сборка
 
@@ -82,6 +84,12 @@ nano .env
 npm ci
 npm run build
 npm run db:migrate
+```
+
+Если после `git pull` странные ошибки API или «старый» фронт — пересоберите с нуля:
+
+```bash
+rm -rf .next && npm run build
 ```
 
 ## 5. Запуск через PM2
@@ -116,20 +124,28 @@ sudo apt install -y certbot python3-certbot-nginx
 
 ### Конфигурация Nginx
 
-Скопируйте пример: `cp docs/nginx.conf.example /etc/nginx/sites-available/telegram-seller`
+1. **DNS** уже указывает на IP сервера (A-записи для `@` и `www`).
+2. Отключите дефолтный сайт, чтобы не видеть «Welcome to nginx»:
+   ```bash
+   sudo rm -f /etc/nginx/sites-enabled/default
+   ```
+3. **Первый раз (до сертификата):** удобнее поднять **только порт 80** с `proxy_pass` на `127.0.0.1:3000` и **без** редиректа на HTTPS — см. комментарий «Первый выпуск сертификата» в `docs/nginx.conf.example`. После успешного `certbot --nginx` Certbot допишет SSL и редирект с 80.
+4. Либо скопируйте полный пример с редиректом и сразу запустите Certbot (если домен уже открывается по HTTP):
+   ```bash
+   sudo cp docs/nginx.conf.example /etc/nginx/sites-available/telegram-seller
+   sudo nano /etc/nginx/sites-available/telegram-seller   # server_name → ваш домен
+   sudo ln -sf /etc/nginx/sites-available/telegram-seller /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   sudo certbot --nginx -d ваш-домен.com -d www.ваш-домен.com
+   ```
 
-Отредактируйте `server_name` на ваш домен, затем:
+Убедитесь, что в блоке `listen 443 ssl` для вашего домена есть `location / { proxy_pass http://127.0.0.1:3000; ... }`, а не только статика.
 
-```bash
-sudo ln -s /etc/nginx/sites-available/telegram-seller /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo certbot --nginx -d ваш-домен.com
-sudo systemctl reload nginx
-```
+## 7. Telegram: webhook или long polling
 
-## 7. Telegram Webhook
+По умолчанию в `ecosystem.config.js` бот работает в режиме **long polling** (`telegram-bot-polling`). Отдельно регистрировать webhook **не нужно**, переменные `TELEGRAM_WEBHOOK_*` можно не задавать.
 
-После запуска приложения зарегистрируйте webhook (требуется TELEGRAM_WEBHOOK_SECRET для авторизации):
+Если переключитесь на **webhook**, после запуска приложения зарегистрируйте его (нужен `TELEGRAM_WEBHOOK_SECRET`):
 
 ```bash
 curl "https://ваш-домен.com/api/telegram/webhook?setWebhook=true&secret=ВАШ_TELEGRAM_WEBHOOK_SECRET"

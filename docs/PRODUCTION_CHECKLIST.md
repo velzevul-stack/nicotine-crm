@@ -10,7 +10,7 @@
 - [ ] `SESSION_SECRET` установлен (минимум 32 символа, уникальный для production)
 - [ ] `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` настроены для production БД
 - [ ] `TELEGRAM_BOT_TOKEN` установлен (токен от BotFather)
-- [ ] `TELEGRAM_WEBHOOK_URL` настроен на production домен
+- [ ] При использовании **webhook**: `TELEGRAM_WEBHOOK_URL` и `TELEGRAM_WEBHOOK_SECRET` заданы. При **long polling** (PM2 `telegram-bot-polling`) webhook не обязателен
 - [ ] Все dev-only переменные удалены или отключены
 
 ### 2. База данных
@@ -54,7 +54,7 @@
 
 ### 7. Telegram бот
 
-- [ ] Webhook настроен на production URL
+- [ ] Либо **long polling** (процесс `telegram-bot-polling` в PM2), либо **webhook** зарегистрирован на production URL
 - [ ] Бот отвечает на команды
 - [ ] Mini App URL настроен в BotFather
 

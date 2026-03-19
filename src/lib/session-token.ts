@@ -9,10 +9,17 @@ export interface Session {
 
 function getSessionSecret(): string {
   const secret = process.env.SESSION_SECRET || 'default-session-secret-change-in-production';
-  if (process.env.NODE_ENV === 'production' && secret === 'default-session-secret-change-in-production') {
-    throw new Error(
-      'SESSION_SECRET must be set in production (min 32 chars). Generate: openssl rand -hex 32'
-    );
+  if (process.env.NODE_ENV === 'production') {
+    if (secret === 'default-session-secret-change-in-production') {
+      throw new Error(
+        'SESSION_SECRET must be set in production (min 32 chars). Generate: openssl rand -hex 32'
+      );
+    }
+    if (secret.length < 32) {
+      throw new Error(
+        'SESSION_SECRET must be at least 32 characters in production. Generate: openssl rand -hex 32'
+      );
+    }
   }
   return secret;
 }

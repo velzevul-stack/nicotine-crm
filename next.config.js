@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
   serverExternalPackages: ['typeorm'],
   // Webpack для сборки (Turbopack по умолчанию в Next.js 16)
   webpack: (config) => {

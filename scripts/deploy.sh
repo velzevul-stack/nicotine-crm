@@ -14,8 +14,9 @@ git pull
 echo ">>> npm ci"
 npm ci
 
-# 3. Сборка
-echo ">>> npm run build"
+# 3. Сборка (чистая .next — меньше залипаний старых чанков после обновлений)
+echo ">>> rm -rf .next && npm run build"
+rm -rf .next
 NODE_ENV=production npm run build
 
 # 4. Миграции БД (рекомендуется сделать backup перед этим)
