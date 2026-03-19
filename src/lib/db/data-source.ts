@@ -19,7 +19,7 @@ import {
   UserStatsEntity,
   SystemSettingsEntity,
   CardEntity,
-} from './entities';
+} from './entities/index';
 import { ensureUserStatsForeignKey } from './ensure-user-stats-fk';
 
 export const AppDataSource = new DataSource({
