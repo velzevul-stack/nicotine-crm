@@ -15,12 +15,11 @@ const UUID_REGEX =
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: brandId } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-
-  const brandId = params.id;
 
   if (!UUID_REGEX.test(brandId)) {
     return NextResponse.json({ message: 'Invalid brand ID' }, { status: 400 });

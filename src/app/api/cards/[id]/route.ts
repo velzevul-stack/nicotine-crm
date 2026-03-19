@@ -11,12 +11,11 @@ const updateSchema = z.object({
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-
-  const { id } = params;
   const body = await request.json();
   const parsed = updateSchema.safeParse(body);
 
@@ -48,12 +47,11 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-
-  const { id } = params;
 
   const ds = await getDataSource();
   const repo = ds.getRepository(CardEntity);

@@ -41,14 +41,15 @@ const updateSchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
   const ds = await getDataSource();
   const sale = await ds.getRepository(SaleEntity).findOne({
-    where: { id: params.id, shopId: session.shopId },
+    where: { id, shopId: session.shopId },
   });
 
   if (!sale) {
@@ -67,8 +68,9 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -85,7 +87,7 @@ export async function PATCH(
 
   return ds.transaction(async (em) => {
     const sale = await em.getRepository(SaleEntity).findOne({
-      where: { id: params.id, shopId: session.shopId },
+      where: { id, shopId: session.shopId },
     });
 
     if (!sale) {
@@ -272,8 +274,9 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -281,7 +284,7 @@ export async function DELETE(
 
   return ds.transaction(async (em) => {
     const sale = await em.getRepository(SaleEntity).findOne({
-      where: { id: params.id, shopId: session.shopId },
+      where: { id, shopId: session.shopId },
     });
 
     if (!sale) {

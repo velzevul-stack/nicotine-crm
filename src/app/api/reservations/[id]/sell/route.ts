@@ -11,8 +11,9 @@ import {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -23,7 +24,7 @@ export async function POST(
 
   return ds.transaction(async (em) => {
     const reservation = await em.getRepository(SaleEntity).findOne({
-      where: { id: params.id, shopId: session.shopId, isReservation: true },
+      where: { id, shopId: session.shopId, isReservation: true },
     });
 
     if (!reservation) {

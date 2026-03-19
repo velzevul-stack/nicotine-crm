@@ -5,8 +5,9 @@ import { SaleEntity, SaleItemEntity } from '@/lib/db/entities';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { flavorId: string } }
+  { params }: { params: Promise<{ flavorId: string }> }
 ) {
+  const { flavorId } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
@@ -14,7 +15,7 @@ export async function GET(
   
   // Find reservations that include this flavor
   const saleItems = await ds.getRepository(SaleItemEntity).find({
-    where: { flavorId: params.flavorId },
+    where: { flavorId },
   });
 
   const saleIds = [...new Set(saleItems.map((si) => si.saleId))];
