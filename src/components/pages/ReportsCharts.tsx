@@ -98,7 +98,7 @@ const RevenueProfitChart = memo(({ data, currency, totalRevenue, periodType }: {
             padding: '8px 12px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           }}
-          formatter={(value: number) => formatCurrency(value, currency)}
+          formatter={(value: unknown) => formatCurrency(Number(value ?? 0), currency)}
           labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
         />
         <Legend 
@@ -177,7 +177,7 @@ const SalesBarChart = memo(({ data, periodType }: { data: ChartData[]; periodTyp
           padding: '6px 10px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
         }}
-        formatter={(value: number) => [value, 'Продаж']}
+        formatter={(value: unknown) => [Number(value ?? 0), 'Продаж']}
       />
       <Bar 
         dataKey="salesCount" 
@@ -228,7 +228,7 @@ const PaymentPieChart = memo(({ data, currency }: { data: PaymentData[]; currenc
           padding: '6px 10px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
         }}
-        formatter={(value: number) => formatCurrency(value, currency)}
+        formatter={(value: unknown) => formatCurrency(Number(value ?? 0), currency)}
       />
       <Legend 
         wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
