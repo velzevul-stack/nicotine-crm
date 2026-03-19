@@ -121,9 +121,9 @@ export function HourlyChartCard({ data, delay = 0 }: HourlyChartCardProps) {
                     fontSize: '12px',
                     padding: '6px 10px',
                   }}
-                  formatter={(value: unknown, name?: string) => [
+                  formatter={(value: unknown, name?: unknown) => [
                     `${Number(value ?? 0)} шт`,
-                    name === 'receipts' ? 'Чеки' : 'Продажи',
+                    String(name) === 'receipts' ? 'Чеки' : 'Продажи',
                   ]}
                   labelFormatter={(label) => `Час ${label}`}
                 />
