@@ -176,7 +176,7 @@ export function Profile() {
                 >
                   <ArrowLeft size={20} strokeWidth={1.5} />
                   <span className="font-semibold">Назад</span>
-                </button>
+                </motion.button>
               </div>
 
               <motion.div
