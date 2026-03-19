@@ -267,7 +267,7 @@ const ChartLegendContent = React.forwardRef<
               <div
                 className="h-2 w-2 shrink-0 rounded-[2px]"
                 style={{
-                  backgroundColor: item.color,
+                  backgroundColor: (typeof item.color === 'string' ? item.color : '') || 'var(--muted-foreground)',
                 }}
               />
             )}
