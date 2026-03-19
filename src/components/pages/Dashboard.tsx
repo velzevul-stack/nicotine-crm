@@ -426,12 +426,12 @@ export function Dashboard() {
                     </span>
                   </div>
                   <p className="text-xs text-[#9CA3AF]">
-                    {day.lastSaleDescription || `${day.revenue.toLocaleString()}₽`}
+                    {day.lastSaleDescription || `${(day.revenue ?? 0).toLocaleString()}₽`}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 ml-3">
                   <span className="text-[#BFE7E5] font-bold">
-                    {formatCurrency(day.revenue, currency)}
+                    {formatCurrency(day.revenue ?? 0, currency)}
                   </span>
                   <ChevronRight size={18} className="text-[#6B7280]" strokeWidth={1.5} />
                 </div>

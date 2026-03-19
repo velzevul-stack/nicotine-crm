@@ -360,7 +360,7 @@ export async function handlePostCallbacks(
       const postText = renderTemplate(template, postData, formatConfig);
 
       try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+        if (ctx.chat) await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
       } catch (e) {}
 
       if (!postText || postText.trim().length === 0) {
@@ -375,7 +375,7 @@ export async function handlePostCallbacks(
     } catch (error) {
       console.error(`Error generating ${action === 'preview' ? 'preview' : 'post'}:`, error);
       try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+        if (ctx.chat) await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
       } catch (e) {}
       await ctx.reply(`❌ Ошибка при генерации ${action === 'preview' ? 'предпросмотра' : 'поста'}.`);
     }

@@ -598,7 +598,7 @@ bot.on('successful_payment', async (ctx) => {
         parseInt(referrerTelegramId),
         `🎉 Поздравляем!\n\n` +
         `Ваш реферал купил подписку, и вы получили бесплатный месяц!\n\n` +
-        `Ваша подписка теперь действует до: ${referrerEndsAt.toLocaleDateString('ru-RU')}\n\n` +
+        `Ваша подписка теперь действует до: ${new Date(referrerEndsAt).toLocaleDateString('ru-RU')}\n\n` +
         `Используйте /referrals для просмотра всех ваших рефералов.`
       );
     } catch (error) {
