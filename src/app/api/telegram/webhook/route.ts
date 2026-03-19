@@ -36,13 +36,14 @@ bot.use(async (ctx, next) => {
   if (ctx.updateType === 'message' && ctx.from) {
     const broadcast = broadcastState.get(ctx.from.id);
     if (broadcast && broadcast.waitingForMessage) {
+      const msg = ctx.message;
       console.log('[Bot] Message received during broadcast:', {
         userId: ctx.from.id,
         updateType: ctx.updateType,
-        messageType: ctx.message ? Object.keys(ctx.message).filter(k => !['message_id', 'date', 'chat', 'from'].includes(k)) : 'unknown',
-        hasText: 'text' in ctx.message,
-        hasPhoto: 'photo' in ctx.message,
-        text: 'text' in ctx.message ? ctx.message.text?.substring(0, 50) : undefined,
+        messageType: msg ? Object.keys(msg).filter(k => !['message_id', 'date', 'chat', 'from'].includes(k)) : 'unknown',
+        hasText: msg && 'text' in msg,
+        hasPhoto: msg && 'photo' in msg,
+        text: msg && 'text' in msg ? ((msg as { text?: string }).text ?? '').substring(0, 50) : undefined,
       });
     }
   }
