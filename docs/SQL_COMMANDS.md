@@ -29,14 +29,14 @@ ORDER BY "createdAt" DESC;
 ```sql
 SELECT id, "telegramId", "firstName", "username", "accessKey", "isActive" 
 FROM users 
-WHERE "accessKey" LIKE '%dev-secret-key%';
+WHERE "accessKey" LIKE '%KEY-%';
 ```
 
 ### 3. Найти пользователя по точному ключу (без учета регистра)
 ```sql
 SELECT id, "telegramId", "firstName", "username", "accessKey", "isActive" 
 FROM users 
-WHERE LOWER("accessKey") = LOWER('dev-secret-key-123');
+WHERE LOWER("accessKey") = LOWER('KEY-your-key-here');
 ```
 
 ### 4. Проверить все ключи доступа в системе
@@ -51,7 +51,7 @@ GROUP BY "accessKey";
 ```sql
 -- ВНИМАНИЕ: Замените 'user-id-here' на реальный ID пользователя
 UPDATE users 
-SET "accessKey" = 'dev-secret-key-123' 
+SET "accessKey" = 'KEY-your-key-here' 
 WHERE id = 'user-id-here';
 ```
 
@@ -99,7 +99,7 @@ INSERT INTO users (
   'Test',
   'test_user',
   'seller',
-  'dev-secret-key-123',
+  'KEY-your-key-here',
   'trial',
   NOW() + INTERVAL '7 days',
   true,

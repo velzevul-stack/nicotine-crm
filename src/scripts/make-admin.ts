@@ -30,7 +30,7 @@ async function makeAdmin() {
     if (!identifier) {
       console.error('Usage: npx tsx src/scripts/make-admin.ts <telegramId или accessKey>');
       console.error('Example: npx tsx src/scripts/make-admin.ts dev-user-1');
-      console.error('Example: npx tsx src/scripts/make-admin.ts dev-secret-key-fe794b4df97be4570efb52f44b7d5ec599ec8751d212ce79');
+      console.error('Example: npx tsx src/scripts/make-admin.ts KEY-your-access-key');
       process.exit(1);
     }
 

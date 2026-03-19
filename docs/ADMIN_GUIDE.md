@@ -1,10 +1,10 @@
 # Руководство по созданию администратора
 
-## Текущий Dev Secret Key
+## Ключ для `npm run db:seed`
 
-**Текущий dev secret key:** `dev-secret-key-fe794b4df97be4570efb52f44b7d5ec599ec8751d212ce79`
+В **`.env`** задайте **`DEV_SEED_ACCESS_KEY`** — им будет пользоваться тестовый аккаунт `dev-user-1`. См. `.env.example`.
 
-⚠️ **ВАЖНО:** Этот ключ используется только для разработки. В production используйте уникальные ключи для каждого пользователя.
+⚠️ **ВАЖНО:** Не коммитьте реальные ключи в git.
 
 ## Создание администратора
 
@@ -23,7 +23,7 @@ npm run make-admin <telegramId или accessKey>
 
 2. **По Access Key:**
    ```bash
-   npm run make-admin dev-secret-key-fe794b4df97be4570efb52f44b7d5ec599ec8751d212ce79
+   npm run make-admin KEY-xxxxxxxx
    ```
 
 ### Что делает команда:

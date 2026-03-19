@@ -35,9 +35,25 @@ console.log('DB_PORT:', process.env.DB_PORT);
 console.log('DB_USER:', process.env.DB_USER);
 console.log('DB_PASSWORD:', process.env.DB_PASSWORD ? '******' : '(not set)');
 
+/** Ключ доступа для тестового пользователя dev-user-1 — только из .env, не хранить в коде. */
+function getDevSeedAccessKey(): string {
+  const key = process.env.DEV_SEED_ACCESS_KEY?.trim();
+  if (!key) {
+    console.error(
+      '\n❌ Не задан DEV_SEED_ACCESS_KEY в .env\n' +
+        '   Добавьте строку: DEV_SEED_ACCESS_KEY=KEY-... или ваш ключ (как в личном кабинете).\n' +
+        '   См. .env.example\n'
+    );
+    process.exit(1);
+  }
+  return key;
+}
+
 // Dynamic import to ensure env vars are loaded BEFORE AppDataSource is initialized
 async function seed() {
   try {
+    const devAccessKey = getDevSeedAccessKey();
+
     console.log('Importing entities...');
     const {
       UserEntity,
@@ -57,7 +73,7 @@ async function seed() {
     } = await import('../lib/db/entities');
     
     console.log('Importing crypto utils...');
-    const { generateAccessKey, generateReferralCode } = await import('../lib/utils/crypto');
+    const { generateReferralCode } = await import('../lib/utils/crypto');
     
     console.log('Importing DataSource...');
     const { DataSource } = await import('typeorm');
@@ -106,29 +122,28 @@ async function seed() {
       // Генерируем ключи и даты
       const trialEndsAt = new Date();
       trialEndsAt.setFullYear(trialEndsAt.getFullYear() + 1); // 1 год триала
-      
-      const accessKey = 'dev-secret-key-fe794b4df97be4570efb52f44b7d5ec599ec8751d212ce79'; // Фиксированный для удобства тестирования
+
       const referralCode = generateReferralCode();
-      
+
       user = userRepo.create({
         telegramId: 'dev-user-1',
         firstName: 'Алексей',
         lastName: null,
         username: 'dev_seller',
         role: 'seller',
-        accessKey,
+        accessKey: devAccessKey,
         subscriptionStatus: 'trial',
         trialEndsAt,
         referralCode,
         isActive: true,
       });
       await userRepo.save(user);
-      console.log(`User created with accessKey: ${accessKey}`);
+      console.log(`User created (dev-user-1), access key from DEV_SEED_ACCESS_KEY, length: ${devAccessKey.length}`);
     } else {
       // Обновляем поля, если их нет у существующего пользователя
       let updated = false;
-      if (!user.accessKey) {
-        user.accessKey = 'dev-secret-key-fe794b4df97be4570efb52f44b7d5ec599ec8751d212ce79';
+      if (!user.accessKey || user.accessKey !== devAccessKey) {
+        user.accessKey = devAccessKey;
         updated = true;
       }
       if (!user.referralCode) {

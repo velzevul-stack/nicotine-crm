@@ -1,10 +1,10 @@
 # Информация о безопасности
 
-## Dev Secret Key для администратора
+## Ключ для тестового сида (`npm run db:seed`)
 
-**Текущий dev secret key:** `dev-secret-key-fe794b4df97be4570efb52f44b7d5ec599ec8751d212ce79`
+Задаётся в **`.env`**: переменная **`DEV_SEED_ACCESS_KEY`** (не храните значение в репозитории). Сид создаёт/обновляет пользователя `dev-user-1` с этим ключом.
 
-⚠️ **ВАЖНО:** Этот ключ используется только для разработки и тестирования. В production используйте уникальные ключи для каждого пользователя.
+⚠️ **ВАЖНО:** В production у каждого пользователя свой ключ; реальные ключи не коммитьте.
 
 ## Защита API endpoints
 
@@ -48,7 +48,7 @@
 npm run make-admin <telegramId или accessKey>
 ```
 
-Пример:
+Пример (подставьте свой `accessKey` или `telegramId`):
 ```bash
-npm run make-admin dev-secret-key-fe794b4df97be4570efb52f44b7d5ec599ec8751d212ce79
+npm run make-admin KEY-xxxxxxxx
 ```

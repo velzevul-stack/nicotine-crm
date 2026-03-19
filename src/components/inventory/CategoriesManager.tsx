@@ -928,15 +928,15 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-4 min-w-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold">Категории</h2>
           <p className="text-sm text-muted-foreground">
             Управляйте категориями товаров в вашем магазине
           </p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        <Button onClick={() => setShowCreateDialog(true)} className="w-full shrink-0 sm:w-auto">
           <Plus size={16} className="mr-2" />
           Добавить категорию
         </Button>
@@ -960,20 +960,22 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="flex items-center gap-3 p-3 border rounded-lg hover:bg-secondary/50 transition-colors"
+                className="flex flex-col gap-3 p-3 border rounded-lg hover:bg-secondary/50 transition-colors sm:flex-row sm:items-center min-w-0"
               >
-                <GripVertical className="text-muted-foreground" size={16} />
-                <span className="text-xl">{category.emoji}</span>
-                <div className="flex-1">
-                  <p className="font-medium">{category.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Порядок: {category.sortOrder}
-                    {category.customFields && category.customFields.length > 0 && (
-                      <span> • Полей: {category.customFields.length}</span>
-                    )}
-                  </p>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <GripVertical className="text-muted-foreground shrink-0" size={16} />
+                  <span className="text-xl shrink-0">{category.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium break-words">{category.name}</p>
+                    <p className="text-xs text-muted-foreground break-words">
+                      Порядок: {category.sortOrder}
+                      {category.customFields && category.customFields.length > 0 && (
+                        <span> • Полей: {category.customFields.length}</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 shrink-0 justify-end flex-wrap sm:justify-start">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1024,14 +1026,14 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
           setShowCreateDialog(open);
         }}
       >
-        <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-lg max-h-[90dvh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Создать категорию</DialogTitle>
             <DialogDescription>
               Добавьте новую категорию для организации товаров
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             <div className="space-y-2">
               <Label>Название</Label>
               <Input
@@ -1068,9 +1070,9 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
             </div>
 
             {/* Custom Fields Section */}
-            <div className="space-y-3 border-t pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
+            <div className="space-y-3 border-t pt-4 min-w-0">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex-1 min-w-0">
                   <Label className="text-base font-semibold">Поля категории</Label>
                   <p className="text-sm text-muted-foreground">
                     Настройте поля, которые нужно заполнять при добавлении товаров в эту категорию
@@ -1090,6 +1092,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="w-full shrink-0 sm:w-auto"
                   onClick={() => {
                     setEditingField(null);
                     setShowAddFieldForm(true);
@@ -1115,17 +1118,17 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                   {formData.customFields.map((field) => (
                     <div
                       key={field.id}
-                      className="flex items-center gap-2 p-3 border rounded-lg bg-secondary/30"
+                      className="flex flex-col gap-3 p-3 border rounded-lg bg-secondary/30 min-w-0 sm:flex-row sm:items-center"
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{field.label}</span>
-                          <span className="text-xs text-muted-foreground">({field.name})</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="font-medium break-words">{field.label}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">({field.name})</span>
                           {field.required && (
                             <span className="text-xs text-destructive">*</span>
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
+                        <div className="text-xs text-muted-foreground mt-1 break-words">
                           Тип: {field.type === 'text' ? 'Текст' : field.type === 'number' ? 'Число' : 'Выбор'}
                           {field.options && field.options.length > 0 && (
                             <span> • Варианты: {field.options.join(', ')}</span>
@@ -1139,7 +1142,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                           )}
                         </div>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 shrink-0 justify-end">
                         <Button
                           type="button"
                           variant="ghost"
@@ -1166,15 +1169,16 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
 
               {/* Add/Edit Field Form */}
               {showAddFieldForm || editingField ? (
-                <div className="border rounded-lg p-4 space-y-3 bg-secondary/20">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-semibold">
+                <div className="border rounded-lg p-3 space-y-3 bg-secondary/20 min-w-0 sm:p-4">
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <Label className="text-sm font-semibold min-w-0 break-words">
                       {editingField ? 'Редактировать поле' : 'Новое поле'}
                     </Label>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="shrink-0"
                       onClick={() => {
                         setEditingField(null);
                         setShowAddFieldForm(false);
@@ -1192,8 +1196,8 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       <X size={14} />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1 min-w-0">
                       <Label className="text-xs">Название поля (ID)</Label>
                       <Input
                         value={fieldFormData.name}
@@ -1202,7 +1206,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                         disabled={!!editingField}
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                       <Label className="text-xs">Метка (отображаемое название)</Label>
                       <Input
                         value={fieldFormData.label}
@@ -1211,8 +1215,8 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1 min-w-0">
                       <Label className="text-xs">Тип поля</Label>
                       <Select
                         value={fieldFormData.type}
@@ -1220,7 +1224,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                           setFieldFormData({ ...fieldFormData, type: value })
                         }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full min-w-0">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1250,7 +1254,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                         setFieldFormData({ ...fieldFormData, target: value })
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full min-w-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1259,7 +1263,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                         <SelectItem value="strength_label">Характеристика (Крепость/Омы)</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-[10px] text-muted-foreground mt-1">
+                    <p className="text-[10px] text-muted-foreground mt-1 break-words">
                       {fieldFormData.target === 'flavor_name' && 'Это поле будет отображаться в нижней строке товара (например: "• Клубника")'}
                       {fieldFormData.target === 'strength_label' && 'Это поле будет отображаться рядом с названием бренда (например: "Brand 20mg")'}
                       {fieldFormData.target === 'custom' && 'Это поле будет сохранено как дополнительная информация о товаре'}
@@ -1277,12 +1281,13 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       />
                     </div>
                   )}
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     {(editingField || showAddFieldForm) && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="w-full sm:w-auto"
                         onClick={() => {
                           setEditingField(null);
                           setShowAddFieldForm(false);
@@ -1303,6 +1308,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                     <Button
                       type="button"
                       size="sm"
+                      className="w-full sm:w-auto"
                       onClick={editingField ? updateField : addField}
                       disabled={!fieldFormData.name.trim() || !fieldFormData.label.trim()}
                     >
@@ -1323,11 +1329,12 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
               ) : null}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowCreateDialog(false)}>
               Отмена
             </Button>
             <Button
+              className="w-full sm:w-auto"
               onClick={handleCreate}
               disabled={createMutation.isPending || !formData.name.trim()}
             >
@@ -1346,12 +1353,12 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
           }
         }}
       >
-        <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-lg max-h-[90dvh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Редактировать категорию</DialogTitle>
             <DialogDescription>Измените название, эмодзи и настройте поля категории</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             <div className="space-y-2">
               <Label>Название</Label>
               <Input
@@ -1388,9 +1395,9 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
             </div>
 
             {/* Custom Fields Section */}
-            <div className="space-y-3 border-t pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
+            <div className="space-y-3 border-t pt-4 min-w-0">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex-1 min-w-0">
                   <Label className="text-base font-semibold">Поля категории</Label>
                   <p className="text-sm text-muted-foreground">
                     Настройте поля, которые нужно заполнять при добавлении товаров в эту категорию
@@ -1410,6 +1417,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="w-full shrink-0 sm:w-auto"
                   onClick={() => {
                     setEditingField(null);
                     setShowAddFieldForm(true);
@@ -1446,7 +1454,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       return (
                         <div
                           key={field.id}
-                          className={`flex items-center gap-2 p-3 border rounded-lg ${
+                          className={`flex flex-col gap-3 p-3 border rounded-lg min-w-0 sm:flex-row sm:items-center ${
                             isConfigured 
                               ? 'bg-secondary/30' 
                               : isExisting 
@@ -1454,10 +1462,10 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                                 : 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900'
                           }`}
                         >
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{field.label}</span>
-                              <span className="text-xs text-muted-foreground">({field.name})</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="font-medium break-words">{field.label}</span>
+                              <span className="text-xs text-muted-foreground shrink-0">({field.name})</span>
                               {field.required && (
                                 <span className="text-xs text-destructive">*</span>
                               )}
@@ -1467,7 +1475,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-muted-foreground mt-1">
+                            <div className="text-xs text-muted-foreground mt-1 break-words">
                               Тип: {field.type === 'text' ? 'Текст' : field.type === 'number' ? 'Число' : 'Выбор'}
                               {field.options && field.options.length > 0 && (
                                 <span> • Варианты: {field.options.join(', ')}</span>
@@ -1481,14 +1489,14 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                               )}
                             </div>
                             {!isConfigured && (
-                              <p className="text-xs text-muted-foreground mt-1 italic">
+                              <p className="text-xs text-muted-foreground mt-1 italic break-words">
                                 {isExisting 
                                   ? 'Это поле используется в существующих товарах. Настройте его, чтобы управлять отображением.'
                                   : 'Это стандартное поле для данной категории. Настройте его для использования.'}
                               </p>
                             )}
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 shrink-0 justify-end">
                             <Button
                               type="button"
                               variant="ghost"
@@ -1542,15 +1550,16 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
 
               {/* Add/Edit Field Form */}
               {showAddFieldForm || editingField ? (
-                <div className="border rounded-lg p-4 space-y-3 bg-secondary/20">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-semibold">
+                <div className="border rounded-lg p-3 space-y-3 bg-secondary/20 min-w-0 sm:p-4">
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <Label className="text-sm font-semibold min-w-0 break-words">
                       {editingField ? 'Редактировать поле' : 'Новое поле'}
                     </Label>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="shrink-0"
                       onClick={() => {
                         setEditingField(null);
                         setShowAddFieldForm(false);
@@ -1568,8 +1577,8 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       <X size={14} />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1 min-w-0">
                       <Label className="text-xs">Название поля (ID)</Label>
                       <Input
                         value={fieldFormData.name}
@@ -1578,7 +1587,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                         disabled={!!editingField}
                       />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                       <Label className="text-xs">Метка (отображаемое название)</Label>
                       <Input
                         value={fieldFormData.label}
@@ -1587,8 +1596,8 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-1 min-w-0">
                       <Label className="text-xs">Тип поля</Label>
                       <Select
                         value={fieldFormData.type}
@@ -1596,7 +1605,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                           setFieldFormData({ ...fieldFormData, type: value })
                         }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full min-w-0">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1626,7 +1635,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                         setFieldFormData({ ...fieldFormData, target: value })
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full min-w-0">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1635,7 +1644,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                         <SelectItem value="strength_label">Характеристика (Крепость/Омы)</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-[10px] text-muted-foreground mt-1">
+                    <p className="text-[10px] text-muted-foreground mt-1 break-words">
                       {fieldFormData.target === 'flavor_name' && 'Это поле будет отображаться в нижней строке товара (например: "• Клубника")'}
                       {fieldFormData.target === 'strength_label' && 'Это поле будет отображаться рядом с названием бренда (например: "Brand 20mg")'}
                       {fieldFormData.target === 'custom' && 'Это поле будет сохранено как дополнительная информация о товаре'}
@@ -1653,12 +1662,13 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                       />
                     </div>
                   )}
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     {(editingField || showAddFieldForm) && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="w-full sm:w-auto"
                         onClick={() => {
                           setEditingField(null);
                           setShowAddFieldForm(false);
@@ -1679,6 +1689,7 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
                     <Button
                       type="button"
                       size="sm"
+                      className="w-full sm:w-auto"
                       onClick={editingField ? updateField : addField}
                       disabled={!fieldFormData.name.trim() || !fieldFormData.label.trim()}
                     >
@@ -1699,11 +1710,12 @@ export function CategoriesManager({ autoOpenCreate = false, onCreateComplete }: 
               ) : null}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingCategory(null)}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setEditingCategory(null)}>
               Отмена
             </Button>
             <Button
+              className="w-full sm:w-auto"
               onClick={handleUpdate}
               disabled={updateMutation.isPending || !formData.name.trim()}
             >

@@ -244,10 +244,10 @@ PaymentPieChart.displayName = 'PaymentPieChart';
 
 const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics, currency, periodType }: ReportsChartsSectionProps) => {
   return (
-    <div className="px-4 mb-4 space-y-4">
+    <div className="px-5 mb-4 space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="glass-card rounded-xl p-3 border-l-4 border-l-primary/40">
+        <div className="bg-[#1B2030] rounded-[16px] p-3 border border-white/10 border-l-4 border-l-primary/40">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
             Средняя выручка
           </p>
@@ -267,7 +267,7 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
             </div>
           )}
         </div>
-        <div className="glass-card rounded-xl p-3 border-l-4 border-l-success/40">
+        <div className="bg-[#1B2030] rounded-[16px] p-3 border border-white/10 border-l-4 border-l-success/40">
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
             Средняя прибыль
           </p>
@@ -281,7 +281,7 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
       </div>
 
       {/* Revenue & Profit Chart */}
-      <div className="glass-card rounded-xl p-4 border border-white/10 shadow-lg">
+      <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <LineChart size={20} className="text-primary" />
@@ -299,7 +299,7 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
 
       {/* Sales Count & Payment Methods */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="glass-card rounded-xl p-4 border border-white/10 shadow-lg min-h-[280px]">
+        <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10 min-h-[280px]">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={18} className="text-[#DED8F6]" />
             <h3 className="font-bold text-sm">Продаж в день</h3>
@@ -314,7 +314,7 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
         </div>
 
         {paymentData.length > 0 && (
-          <div className="glass-card rounded-xl p-4 border border-white/10 shadow-lg">
+          <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10">
             <div className="flex items-center gap-2 mb-4">
               <PieChart size={18} className="text-[#F2D6DE]" />
               <h3 className="font-bold text-sm">Типы оплаты</h3>

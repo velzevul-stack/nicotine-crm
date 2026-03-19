@@ -427,8 +427,8 @@ export function Reports() {
         }
       />
       
-      <div className="px-4 mb-4">
-        <div className="bg-[#151922] rounded-[24px] p-5 border border-white/10 space-y-3">
+      <div className="px-5 mb-4">
+        <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10 space-y-3">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
             Период отчёта
           </label>
@@ -448,7 +448,7 @@ export function Reports() {
                 className={`py-2.5 px-1 min-w-0 rounded-[12px] text-xs font-semibold transition-all active:scale-[0.98] truncate ${
                   periodType === type
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-card text-muted-foreground hover:bg-muted'
+                    : 'bg-[#151922]/60 text-[#9CA3AF] hover:bg-[#151922]/90'
                 }`}
                 title={type === 'custom' ? 'Произвольный период' : undefined}
               >
@@ -496,11 +496,11 @@ export function Reports() {
 
       {/* Charts Toggle Button */}
       {dayReports.length > 0 && (
-        <div className="px-4 mb-3">
+        <div className="px-5 mb-3">
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowCharts(!showCharts)}
-            className="w-full bg-[#151922] rounded-[18px] border border-white/10 p-4 flex items-center justify-between hover:bg-[#1B2030] transition-colors active:scale-[0.98]"
+            className="w-full bg-[#1B2030] rounded-[16px] border border-white/10 p-4 flex items-center justify-between hover:bg-[#252b3a] transition-colors active:scale-[0.98]"
           >
             <div className="flex items-center gap-2">
               <BarChart3 size={18} className="text-primary" />
@@ -528,8 +528,8 @@ export function Reports() {
           >
             <div className="min-h-[700px]">
               <Suspense fallback={
-                <div className="px-4 mb-4">
-                  <div className="glass-card rounded-xl p-4">
+                <div className="px-5 mb-4">
+                  <div className="bg-[#1B2030] rounded-[16px] border border-white/10 p-4">
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     </div>
@@ -549,7 +549,7 @@ export function Reports() {
         )}
       </AnimatePresence>
 
-      <div className="px-4 space-y-3 pb-4">
+      <div className="px-5 space-y-3 pb-4">
         {dayReports.map((day) => {
           const isSelected = selectedDate === day.date;
           return (
@@ -559,8 +559,8 @@ export function Reports() {
                 onClick={() =>
                   setSelectedDate(isSelected ? null : day.date)
                 }
-                className={`w-full glass-card rounded-xl p-4 text-left transition-all ${
-                  isSelected ? 'border-primary/30' : ''
+                className={`w-full bg-[#1B2030] rounded-[16px] border p-4 text-left transition-all ${
+                  isSelected ? 'border-[#BFE7E5]/40' : 'border-white/10'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -632,7 +632,7 @@ export function Reports() {
                     className="overflow-hidden"
                   >
                     {selectedReport && (
-                      <div className="glass-card rounded-xl p-3 mt-2 grid grid-cols-3 gap-2">
+                      <div className="bg-[#1B2030] rounded-[16px] border border-white/10 p-3 mt-2 grid grid-cols-3 gap-2">
                         <div className="text-center p-2 border-r border-border/50">
                           <p className="font-mono-nums font-bold text-primary">
                             {formatCurrency(selectedReport.revenue, shopData?.currency)}
@@ -665,9 +665,13 @@ export function Reports() {
                         daySales.map((sale: any) => (
                           <div
                             key={sale.id}
-                            className={`glass-card rounded-xl p-3 ${
-                              sale.status === 'edited' ? 'border-warning/30' : ''
-                            } ${sale.isReservation ? 'border-primary/30' : ''}`}
+                            className={`rounded-[16px] border p-3 bg-[#1B2030] ${
+                              sale.status === 'edited'
+                                ? 'border-warning/40'
+                                : sale.isReservation
+                                  ? 'border-primary/35'
+                                  : 'border-white/10'
+                            }`}
                           >
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
