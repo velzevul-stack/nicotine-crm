@@ -7,6 +7,8 @@ type TelegramWebAppLike = {
   ready: () => void;
   expand?: () => void;
   initData: string;
+  /** Bot API 7.7+ — отключает вертикальные свайпы, закрывающие Mini App на iOS */
+  disableVerticalSwipes?: () => void;
 };
 
 export function getTelegramWebApp(): TelegramWebAppLike | undefined {
@@ -17,6 +19,15 @@ export function getTelegramWebApp(): TelegramWebAppLike | undefined {
 
 export function isTelegramMiniApp(): boolean {
   return Boolean(getTelegramWebApp());
+}
+
+/** Снижает случайное сворачивание Mini App при скролле списков (актуально для iPhone). */
+export function applyTelegramMiniAppSwipeGuard(): void {
+  try {
+    getTelegramWebApp()?.disableVerticalSwipes?.();
+  } catch {
+    /* старые клиенты Telegram */
+  }
 }
 
 const STEP_MS = 40;
@@ -46,6 +57,7 @@ export async function waitForTelegramInitData(options?: {
   try {
     tg.ready();
     tg.expand?.();
+    tg.disableVerticalSwipes?.();
   } catch {
     /* ignore */
   }

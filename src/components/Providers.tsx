@@ -1,9 +1,16 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { applyTelegramMiniAppSwipeGuard } from '@/lib/telegram-mini-app';
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    applyTelegramMiniAppSwipeGuard();
+    const t = window.setTimeout(applyTelegramMiniAppSwipeGuard, 400);
+    return () => clearTimeout(t);
+  }, []);
+
   const [queryClient] = useState(
     () =>
       new QueryClient({
