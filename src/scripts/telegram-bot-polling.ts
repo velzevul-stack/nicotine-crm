@@ -42,6 +42,11 @@ import { handleSubscription, handleBuySubscription } from './bot/commands/subscr
 import { handleReferrals, handleCopyReferralLink } from './bot/commands/referrals';
 import { getMainMenuKeyboard } from './bot/keyboards/main-menu';
 import { getProfileKeyboard } from './bot/keyboards/profile';
+import {
+  getSupportTelegramUsernameForUser,
+  supportUsernameToTelegramUrl,
+  TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT,
+} from '@/lib/telegram/support-username';
 import { getSubscriptionKeyboard } from './bot/keyboards/subscription';
 import { getOnboardingKeyboard } from './bot/keyboards/onboarding';
 import { setupErrorHandler } from './bot/utils/error-handler';
@@ -680,6 +685,14 @@ async function generateAndSendPostImmediately(ctx: any, userId: number, userShop
   }
 }
 
+async function mainMenuKeyboardForUser(
+  ds: DataSource,
+  user: { id: string; role: 'seller' | 'client' | 'admin' }
+) {
+  const support = await getSupportTelegramUsernameForUser(ds, user);
+  return getMainMenuKeyboard(user.role, support);
+}
+
 // ==================== КОМАНДЫ ====================
 
 // Команда /start - использует новый модуль
@@ -775,7 +788,7 @@ bot.command('start', async (ctx) => {
       ? 'Клиент' 
       : 'Администратор';
 
-  const menuKeyboard = getMainMenuKeyboard(user.role);
+  const menuKeyboard = await mainMenuKeyboardForUser(ds, user);
   console.log('[Bot] Sending greeting message with menu keyboard');
   
   try {
@@ -807,7 +820,7 @@ bot.command('menu', async (ctx) => {
     return;
   }
 
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard(user.role) });
+  await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
 });
 
 // Команда /broadcast - массовая рассылка (только для админа @wendigo2347)
@@ -862,8 +875,11 @@ bot.command('updatekeyboard', async (ctx) => {
   const ds = await getDataSource();
   const userRepo = ds.getRepository(UserEntity);
   const user = await userRepo.findOne({ where: { telegramId } });
-  
-  await ctx.reply('📱 Обновляю клавиатуру...', { reply_markup: getMainMenuKeyboard(user?.role) });
+  const reply_markup = user
+    ? await mainMenuKeyboardForUser(ds, user)
+    : getMainMenuKeyboard();
+
+  await ctx.reply('📱 Обновляю клавиатуру...', { reply_markup });
 });
 
 // Обработка выбора роли (обновлено для использования новых модулей)
@@ -940,13 +956,20 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   );
   
   // Показываем меню после регистрации с учетом роли
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard(role) });
+  await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
 });
 
 // Функция для обновления клавиатуры пользователя
 async function updateUserKeyboard(ctx: any) {
   try {
-    await ctx.reply('📱 Обновление меню...', { reply_markup: getMainMenuKeyboard() });
+    const ds = await getDataSource();
+    const userRepo = ds.getRepository(UserEntity);
+    const telegramId = String(ctx.from?.id ?? '');
+    const user = await userRepo.findOne({ where: { telegramId } });
+    const reply_markup = user
+      ? await mainMenuKeyboardForUser(ds, user)
+      : getMainMenuKeyboard();
+    await ctx.reply('📱 Обновление меню...', { reply_markup });
     // Удаляем сообщение об обновлении через секунду
     setTimeout(async () => {
       try {
@@ -993,7 +1016,7 @@ bot.command('key', async (ctx) => {
     ...inlineKeyboard,
   });
   
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard(user.role) });
+  await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
 });
 
 // Команда /me - использует новый модуль
@@ -1775,6 +1798,21 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  if (text === TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT) {
+    const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+    const supportUrl = supportUsernameToTelegramUrl(supportUsername);
+    if (!supportUrl) {
+      await ctx.reply('Контакт поддержки пока не настроен в админке.');
+      return;
+    }
+    await ctx.reply('Напишите нам в Telegram:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
+      },
+    });
+    return;
+  }
+
   // Обработка кнопки "📝 Пост" - моментальная генерация поста
   if (text === '📝 Пост' || text.includes('Пост')) {
     console.log('[bot] Button "📝 Пост" pressed by user:', ctx.from.id, 'text:', text);
@@ -1830,7 +1868,15 @@ bot.on('text', async (ctx) => {
 
 💡 Используйте кнопки меню для быстрого доступа к функциям!`;
 
-    await ctx.reply(helpText);
+    const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+    const supportUrl = supportUsernameToTelegramUrl(supportUsername);
+    await ctx.reply(helpText, {
+      ...(supportUrl && {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
+        },
+      }),
+    });
     return;
   }
 });
@@ -1929,7 +1975,10 @@ bot.action('back_to_menu', async (ctx) => {
   const ds = await getDataSource();
   const userRepo = ds.getRepository(UserEntity);
   const user = await userRepo.findOne({ where: { telegramId } });
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard(user?.role) });
+  const reply_markup = user
+    ? await mainMenuKeyboardForUser(ds, user)
+    : getMainMenuKeyboard();
+  await ctx.reply('📱 Главное меню:', { reply_markup });
 });
 
 // Обработка callback для подписки

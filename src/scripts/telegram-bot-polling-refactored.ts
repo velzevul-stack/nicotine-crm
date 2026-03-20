@@ -13,6 +13,11 @@ import dotenv from 'dotenv';
 import { Telegraf, Context } from 'telegraf';
 import { Client } from 'pg';
 import { DataSource, IsNull } from 'typeorm';
+import {
+  getSupportTelegramUsernameForUser,
+  supportUsernameToTelegramUrl,
+  TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT,
+} from '@/lib/telegram/support-username';
 import { UserEntity, PostFormatEntity, UserShopEntity } from '@/lib/db/entities';
 import {
   ShopEntity,
@@ -334,6 +339,14 @@ async function showPostMenu(ctx: any, userId: number, userShopId: string) {
   return { message, keyboard };
 }
 
+async function mainMenuKeyboardForUser(
+  ds: DataSource,
+  user: { id: string; role: 'seller' | 'client' | 'admin' }
+) {
+  const support = await getSupportTelegramUsernameForUser(ds, user);
+  return getMainMenuKeyboard(user.role, support);
+}
+
 // ==================== КОМАНДЫ ====================
 
 // Команда /start - использует новый модуль
@@ -354,7 +367,7 @@ bot.command('menu', async (ctx) => {
     return;
   }
 
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard() });
+  await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
 });
 
 // Обработка выбора роли (обновлено для использования новых модулей)
@@ -429,7 +442,7 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   );
   
   // Показываем меню после регистрации
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard() });
+  await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
 });
 
 // Команда /key
@@ -462,7 +475,7 @@ bot.command('key', async (ctx) => {
     ...inlineKeyboard,
   });
   
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard() });
+  await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
 });
 
 // Команда /me - использует новый модуль
@@ -1019,6 +1032,21 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  if (text === TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT) {
+    const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+    const supportUrl = supportUsernameToTelegramUrl(supportUsername);
+    if (!supportUrl) {
+      await ctx.reply('Контакт поддержки пока не настроен в админке.');
+      return;
+    }
+    await ctx.reply('Напишите нам в Telegram:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
+      },
+    });
+    return;
+  }
+
   if (text === '📝 Пост') {
     if (user.role !== 'seller') {
       await ctx.reply('❌ Эта команда доступна только продавцам.');
@@ -1068,7 +1096,15 @@ bot.on('text', async (ctx) => {
 
 💡 Используйте кнопки меню для быстрого доступа к функциям!`;
 
-    await ctx.reply(helpText);
+    const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+    const supportUrl = supportUsernameToTelegramUrl(supportUsername);
+    await ctx.reply(helpText, {
+      ...(supportUrl && {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
+        },
+      }),
+    });
     return;
   }
 });
@@ -1121,7 +1157,14 @@ bot.action('profile_back', async (ctx) => {
 
 bot.action('back_to_menu', async (ctx) => {
   await ctx.answerCbQuery('Возврат в меню');
-  await ctx.reply('📱 Главное меню:', { reply_markup: getMainMenuKeyboard() });
+  const telegramId = String(ctx.from.id);
+  const ds = await getDataSource();
+  const userRepo = ds.getRepository(UserEntity);
+  const user = await userRepo.findOne({ where: { telegramId } });
+  const reply_markup = user
+    ? await mainMenuKeyboardForUser(ds, user)
+    : getMainMenuKeyboard();
+  await ctx.reply('📱 Главное меню:', { reply_markup });
 });
 
 // Обработка callback для подписки

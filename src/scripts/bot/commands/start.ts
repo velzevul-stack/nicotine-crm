@@ -1,9 +1,9 @@
 import { Context } from 'telegraf';
 import { DataSource } from 'typeorm';
 import { UserEntity } from '@/lib/db/entities';
+import { getSupportTelegramUsernameForUser } from '@/lib/telegram/support-username';
 import { getOnboardingKeyboard } from '../keyboards/onboarding';
 import { getMainMenuKeyboard } from '../keyboards/main-menu';
-import { getProfileKeyboard } from '../keyboards/profile';
 
 /**
  * Команда /start - улучшенный онбординг с баннером
@@ -79,12 +79,14 @@ export async function handleStart(ctx: Context, dataSource: DataSource) {
       ? 'Клиент' 
       : 'Администратор';
 
+  const supportUsername = await getSupportTelegramUsernameForUser(dataSource, user);
+
   await ctx.reply(
     `Привет, ${firstName || 'пользователь'}! 👋\n\n` +
       `Ваша роль: ${roleText}\n` +
       `Статус подписки: ${user.subscriptionStatus === 'trial' ? 'Пробный период' : user.subscriptionStatus === 'active' ? 'Активна' : 'Истекла'}` +
       trialInfo +
       subscriptionInfo,
-    { reply_markup: getMainMenuKeyboard(user.role) }
+    { reply_markup: getMainMenuKeyboard(user.role, supportUsername) }
   );
 }

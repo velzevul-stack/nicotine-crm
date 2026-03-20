@@ -1,25 +1,10 @@
 import { Context } from 'telegraf';
 import { DataSource } from 'typeorm';
-import { UserEntity, UserShopEntity, SaleEntity, ShopEntity } from '@/lib/db/entities';
+import { UserEntity, UserShopEntity, SaleEntity } from '@/lib/db/entities';
+import { getSupportTelegramUsernameForUser } from '@/lib/telegram/support-username';
 import { getProfileKeyboard } from '../keyboards/profile';
 import { getMainMenuKeyboard } from '../keyboards/main-menu';
 import { startOfDay, endOfDay } from 'date-fns';
-
-/** Получает supportTelegramUsername из магазина пользователя или первого магазина в системе */
-async function getSupportTelegramUsername(
-  ds: DataSource,
-  user: { id: string }
-): Promise<string | null> {
-  const userShopRepo = ds.getRepository(UserShopEntity);
-  const shopRepo = ds.getRepository(ShopEntity);
-  const userShop = await userShopRepo.findOne({ where: { userId: user.id } });
-  if (userShop) {
-    const shop = await shopRepo.findOne({ where: { id: userShop.shopId } });
-    if (shop?.supportTelegramUsername) return shop.supportTelegramUsername;
-  }
-  const firstShop = await shopRepo.findOne({ where: {} });
-  return firstShop?.supportTelegramUsername ?? null;
-}
 
 /**
  * Команда /me - улучшенный профиль с карточкой пользователя
@@ -117,7 +102,7 @@ export async function handleProfile(ctx: Context, dataSource: DataSource) {
     }
   }
 
-  const supportUsername = await getSupportTelegramUsername(dataSource, user);
+  const supportUsername = await getSupportTelegramUsernameForUser(dataSource, user);
   await ctx.reply(profileText, { reply_markup: getProfileKeyboard(user.role, supportUsername) });
 }
 
@@ -238,7 +223,7 @@ export async function confirmRoleSwitch(
   const referrals = await userRepo.find({ where: { referrerId: newUser.id } });
   updatedProfileText += `— Рефералов: ${referrals.length}\n`;
 
-  const supportUsername = await getSupportTelegramUsername(dataSource, newUser);
+  const supportUsername = await getSupportTelegramUsernameForUser(dataSource, newUser);
   // Обновляем сообщение профиля
   try {
     await ctx.editMessageText(
@@ -254,5 +239,7 @@ export async function confirmRoleSwitch(
   }
 
   // Обновляем главное меню с учетом новой роли
-  await ctx.reply('📱 Главное меню обновлено:', { reply_markup: getMainMenuKeyboard(newRole) });
+  await ctx.reply('📱 Главное меню обновлено:', {
+    reply_markup: getMainMenuKeyboard(newRole, supportUsername),
+  });
 }

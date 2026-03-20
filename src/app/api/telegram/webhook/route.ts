@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Telegraf } from 'telegraf';
+import type { DataSource } from 'typeorm';
 import { getDataSource } from '@/lib/db/data-source';
 import { UserEntity, PostFormatEntity, UserShopEntity, CategoryEntity, BrandEntity, ProductFormatEntity, FlavorEntity, StockItemEntity, ShopEntity, SaleEntity, SaleItemEntity } from '@/lib/db/entities';
+import {
+  getSupportTelegramUsernameForUser,
+  supportUsernameToTelegramUrl,
+  TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT,
+} from '@/lib/telegram/support-username';
 import { In, IsNull } from 'typeorm';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
@@ -56,29 +62,39 @@ function getMiniAppUrl(): string {
 }
 
 // Функция для получения главного меню (Reply Keyboard)
-function getMainMenu() {
+function getMainMenu(supportTelegramUsername?: string | null) {
+  const supportUser = supportTelegramUsername?.replace('@', '').trim();
+  const keyboard: any[][] = [
+    [{ text: '🌐 Открыть приложение', web_app: { url: getMiniAppUrl() } }],
+    [{ text: '📝 Пост' }],
+    [
+      { text: '🔑 Мой ключ' },
+      { text: '👤 Профиль' },
+    ],
+    [
+      { text: '📋 Форматы' },
+      { text: '💳 Подписка' },
+    ],
+    [
+      { text: '🎁 Рефералы' },
+      { text: '❓ Помощь' },
+    ],
+  ];
+  if (supportUser) {
+    keyboard.push([{ text: TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT }]);
+  }
   return {
     reply_markup: {
-      keyboard: [
-        [{ text: '🌐 Открыть приложение', web_app: { url: getMiniAppUrl() } }],
-        [{ text: '📝 Пост' }],
-        [
-          { text: '🔑 Мой ключ' },
-          { text: '👤 Профиль' },
-        ],
-        [
-          { text: '📋 Форматы' },
-          { text: '💳 Подписка' },
-        ],
-        [
-          { text: '🎁 Рефералы' },
-          { text: '❓ Помощь' },
-        ],
-      ],
+      keyboard,
       resize_keyboard: true,
       persistent: true,
     },
   };
+}
+
+async function getMainMenuForUser(ds: DataSource, user: { id: string }) {
+  const support = await getSupportTelegramUsernameForUser(ds, user);
+  return getMainMenu(support);
 }
 
 // Состояние выбора роли (в памяти, для MVP достаточно)
@@ -203,7 +219,7 @@ bot.command('start', async (ctx) => {
   );
   
   // Показываем меню
-  await ctx.reply('📱 Главное меню:', getMainMenu());
+  await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
 });
 
 // Обработка выбора роли
@@ -278,7 +294,7 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   );
   
   // Показываем меню после регистрации
-  await ctx.reply('📱 Главное меню:', getMainMenu());
+  await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
 });
 
 // Команда /menu
@@ -295,7 +311,7 @@ bot.command('menu', async (ctx) => {
     return;
   }
 
-  await ctx.reply('📱 Главное меню:', getMainMenu());
+  await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
 });
 
 // Команда /broadcast - массовая рассылка (только для админа @wendigo2347)
@@ -378,7 +394,7 @@ bot.command('key', async (ctx) => {
   });
   
   // Показываем меню
-  await ctx.reply('📱 Главное меню:', getMainMenu());
+  await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
 });
 
 // Функция для показа меню генерации поста
@@ -658,20 +674,8 @@ bot.command('me', async (ctx) => {
     info += `Приглашайте друзей! Когда они купят подписку, вы получите бесплатный месяц.`;
   }
 
-  // Кнопка поддержки из админки
-  let supportUsername: string | null = null;
-  const userShop = await ds.getRepository(UserShopEntity).findOne({ where: { userId: user.id } });
-  if (userShop) {
-    const shop = await ds.getRepository(ShopEntity).findOne({ where: { id: userShop.shopId } });
-    supportUsername = shop?.supportTelegramUsername ?? null;
-  }
-  if (!supportUsername) {
-    const firstShop = await ds.getRepository(ShopEntity).findOne({ where: {} });
-    supportUsername = firstShop?.supportTelegramUsername ?? null;
-  }
-  const supportUrl = supportUsername
-    ? `https://t.me/${supportUsername.replace('@', '')}`
-    : null;
+  const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+  const supportUrl = supportUsernameToTelegramUrl(supportUsername);
 
   await ctx.reply(info, {
     parse_mode: 'Markdown',
@@ -683,7 +687,7 @@ bot.command('me', async (ctx) => {
   });
 
   // Показываем меню
-  await ctx.reply('📱 Главное меню:', getMainMenu());
+  await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
 });
 
 // Команда /subscribe - покупка подписки через звёзды
@@ -1603,20 +1607,8 @@ bot.on('text', async (ctx) => {
       info += `Приглашайте друзей! Когда они купят подписку, вы получите бесплатный месяц.`;
     }
 
-    // Кнопка поддержки из админки
-    let supportUsername: string | null = null;
-    const userShop = await ds.getRepository(UserShopEntity).findOne({ where: { userId: user.id } });
-    if (userShop) {
-      const shop = await ds.getRepository(ShopEntity).findOne({ where: { id: userShop.shopId } });
-      supportUsername = shop?.supportTelegramUsername ?? null;
-    }
-    if (!supportUsername) {
-      const firstShop = await ds.getRepository(ShopEntity).findOne({ where: {} });
-      supportUsername = firstShop?.supportTelegramUsername ?? null;
-    }
-    const supportUrl = supportUsername
-      ? `https://t.me/${supportUsername.replace('@', '')}`
-      : null;
+    const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+    const supportUrl = supportUsernameToTelegramUrl(supportUsername);
 
     await ctx.reply(info, {
       parse_mode: 'Markdown',
@@ -1625,6 +1617,21 @@ bot.on('text', async (ctx) => {
           inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
         },
       }),
+    });
+    return;
+  }
+
+  if (text === TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT) {
+    const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+    const supportUrl = supportUsernameToTelegramUrl(supportUsername);
+    if (!supportUrl) {
+      await ctx.reply('Контакт поддержки пока не настроен в админке.');
+      return;
+    }
+    await ctx.reply('Напишите нам в Telegram:', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
+      },
     });
     return;
   }
@@ -1816,20 +1823,8 @@ bot.on('text', async (ctx) => {
 
 💡 Используйте кнопки меню для быстрого доступа к функциям!`;
 
-    // Кнопка поддержки
-    let supportUsername: string | null = null;
-    const userShop = await ds.getRepository(UserShopEntity).findOne({ where: { userId: user.id } });
-    if (userShop) {
-      const shop = await ds.getRepository(ShopEntity).findOne({ where: { id: userShop.shopId } });
-      supportUsername = shop?.supportTelegramUsername ?? null;
-    }
-    if (!supportUsername) {
-      const firstShop = await ds.getRepository(ShopEntity).findOne({ where: {} });
-      supportUsername = firstShop?.supportTelegramUsername ?? null;
-    }
-    const supportUrl = supportUsername
-      ? `https://t.me/${supportUsername.replace('@', '')}`
-      : null;
+    const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
+    const supportUrl = supportUsernameToTelegramUrl(supportUsername);
 
     await ctx.reply(helpText, {
       ...(supportUrl && {
