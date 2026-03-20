@@ -102,9 +102,23 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const costPrice =
+      typeof formData.costPrice === 'string'
+        ? formData.costPrice === ''
+          ? 0
+          : parseFloat(formData.costPrice) || 0
+        : formData.costPrice;
+    if (costPrice < 0) {
+      toast({
+        title: 'Ошибка',
+        description: 'Себестоимость (закупка) не может быть отрицательной',
+        variant: 'destructive',
+      });
+      return;
+    }
     const payload = {
       ...formData,
-      costPrice: typeof formData.costPrice === 'string' ? (formData.costPrice === '' ? 0 : parseFloat(formData.costPrice) || 0) : formData.costPrice,
+      costPrice: Math.max(0, costPrice),
       unitPrice: typeof formData.unitPrice === 'string' ? (formData.unitPrice === '' ? 0 : parseFloat(formData.unitPrice) || 0) : formData.unitPrice,
     };
     updateMutation.mutate(payload);
@@ -230,10 +244,19 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
                 id="cost"
                 type="number"
                 step="0.01"
+                min={0}
                 value={formData.costPrice || ''}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setFormData({ ...formData, costPrice: val === '' ? '' : parseFloat(val) || '' });
+                  if (val === '') {
+                    setFormData({ ...formData, costPrice: '' });
+                    return;
+                  }
+                  const n = parseFloat(val);
+                  setFormData({
+                    ...formData,
+                    costPrice: Number.isFinite(n) ? Math.max(0, n) : '',
+                  });
                 }}
                 onFocus={(e) => {
                   if (e.target.value === '0') {

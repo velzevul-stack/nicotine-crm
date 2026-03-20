@@ -23,7 +23,7 @@ const createSchema = z.object({
   ohmValue: z.string().optional(), // Для расходников - омы (0.4, 1, 0.6)
   resistanceValue: z.string().optional(), // Для расходников - сопротивление (Ω)
   flavorName: z.string().min(1).optional(), // Опционально для расходников
-  costPrice: z.number().min(0),
+  costPrice: z.number().finite().min(0, { message: 'Себестоимость не может быть отрицательной' }),
   unitPrice: z.number().min(0),
   quantity: z.number().int().min(0).default(0),
   customValues: z.record(z.any()).optional(),

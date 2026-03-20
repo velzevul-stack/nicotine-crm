@@ -205,6 +205,15 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
 
   const confirmReceive = async () => {
     try {
+      if (receiveItems.some((ri) => ri.customCostPrice != null && ri.customCostPrice < 0)) {
+        toast({
+          title: 'Ошибка',
+          description: 'Закупочная цена не может быть отрицательной',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const itemsDetails: string[] = [];
       const flavors = Array.isArray(inventory?.flavors) ? inventory.flavors : [];
       const productFormats = Array.isArray(inventory?.productFormats) ? inventory.productFormats : [];
@@ -429,11 +438,13 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
                                     onChange={(e) => {
                                       const v = e.target.value;
                                       setReceiveItems((prev) =>
-                                        prev.map((i) =>
-                                          i.flavorId === item.flavorId
-                                            ? { ...i, customCostPrice: v === '' ? undefined : parseFloat(v) || 0 }
-                                            : i
-                                        )
+                                        prev.map((i) => {
+                                          if (i.flavorId !== item.flavorId) return i;
+                                          if (v === '') return { ...i, customCostPrice: undefined };
+                                          const n = parseFloat(v);
+                                          if (!Number.isFinite(n)) return { ...i, customCostPrice: undefined };
+                                          return { ...i, customCostPrice: Math.max(0, n) };
+                                        })
                                       );
                                     }}
                                     className="mt-0.5 w-24 h-7 px-2 rounded text-xs bg-background border border-border"
@@ -718,7 +729,22 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       });
       return;
     }
-    
+
+    const costPriceValue =
+      typeof formData.costPrice === 'string'
+        ? formData.costPrice === ''
+          ? 0
+          : parseFloat(formData.costPrice) || 0
+        : formData.costPrice;
+    if (costPriceValue < 0) {
+      toast({
+        title: 'Ошибка',
+        description: 'Себестоимость (закупка) не может быть отрицательной',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Validation Logic
     if (selectedCategory?.customFields && selectedCategory.customFields.length > 0) {
         // Dynamic Validation
@@ -828,7 +854,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     
     const payload: any = {
       barcode: formData.barcode.trim() || null,
-      costPrice: typeof formData.costPrice === 'string' ? (formData.costPrice === '' ? 0 : parseFloat(formData.costPrice) || 0) : formData.costPrice,
+      costPrice: Math.max(0, costPriceValue),
       unitPrice: unitPriceValue,
       quantity: formData.quantity,
       customValues: Object.keys(allCustomValues).length > 0 ? allCustomValues : undefined,
@@ -1277,10 +1303,19 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
               <Input 
                 type="number" 
                 step="0.01"
+                min={0}
                 value={formData.costPrice || ''} 
                 onChange={e => {
                   const val = e.target.value;
-                  setFormData({...formData, costPrice: val === '' ? 0 : parseFloat(val) || 0});
+                  if (val === '') {
+                    setFormData({ ...formData, costPrice: 0 });
+                    return;
+                  }
+                  const n = parseFloat(val);
+                  setFormData({
+                    ...formData,
+                    costPrice: Number.isFinite(n) ? Math.max(0, n) : 0,
+                  });
                 }}
                 onFocus={(e) => {
                   if (e.target.value === '0') {

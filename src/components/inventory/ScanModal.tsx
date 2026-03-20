@@ -134,9 +134,9 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
             facingMode: 'environment',
             width: { ideal: 1280, max: 1920 },
             height: { ideal: 720, max: 1080 },
-            // Неподдерживаемые поля игнорируются браузером; на части Android даёт непрерывный автофокус
+            // focusMode не в lib.dom; браузер может применить на части Android
             advanced: [{ focusMode: 'continuous' }],
-          } as MediaTrackConstraints,
+          } as unknown as MediaTrackConstraints,
         };
 
         const onDecoded = (decodedText: string) => {

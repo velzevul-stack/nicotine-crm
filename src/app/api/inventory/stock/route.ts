@@ -7,7 +7,7 @@ import { z } from 'zod';
 const updateSchema = z.object({
   flavorId: z.string().uuid(),
   quantity: z.number().int().min(0),
-  costPrice: z.number().min(0).optional(),
+  costPrice: z.number().finite().min(0, { message: 'Закупочная цена не может быть отрицательной' }).optional(),
 });
 
 export async function PATCH(request: NextRequest) {
