@@ -1,15 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { useHintSeen } from '@/hooks/use-hint-seen';
-import { Moon, Sun, Settings, MessageCircle } from 'lucide-react';
+import { Moon, Sun, Settings, MessageCircle, LogOut } from 'lucide-react';
+
+const ACCESS_KEY_STORAGE = 'telegram_access_key';
 
 export function SettingsTab() {
+  const router = useRouter();
   const { toast } = useToast();
   const [showHint] = useHintSeen('settings');
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const { data: shopData } = useQuery({
     queryKey: ['shop'],
@@ -71,6 +76,23 @@ export function SettingsTab() {
       address: address.trim() || null,
       currency,
     });
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось выйти', variant: 'destructive' });
+      setLoggingOut(false);
+      return;
+    }
+    try {
+      localStorage.removeItem(ACCESS_KEY_STORAGE);
+    } catch {
+      /* ignore */
+    }
+    router.replace('/login');
   };
 
   return (
@@ -175,6 +197,16 @@ export function SettingsTab() {
           className="w-full h-11 rounded-[14px] bg-[#BFE7E5] text-[#111111] font-semibold disabled:opacity-50 transition-colors active:scale-[0.98]"
         >
           {updateShopMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="w-full py-3 px-4 rounded-[12px] border border-red-500/25 text-red-400/90 text-sm font-medium flex items-center justify-center gap-2 hover:bg-red-500/10 transition-colors disabled:opacity-50 active:scale-[0.98]"
+        >
+          <LogOut size={18} strokeWidth={1.5} />
+          {loggingOut ? 'Выход...' : 'Выйти из аккаунта'}
         </button>
       </div>
     </div>
