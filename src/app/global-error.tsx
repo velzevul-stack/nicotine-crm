@@ -17,7 +17,30 @@ export default function GlobalError({
 
   return (
     <html lang="ru">
-      <body style={{ margin: 0, fontFamily: 'system-ui, sans-serif', background: '#0f0f0f', color: '#fff', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <body
+        style={{
+          margin: 0,
+          height: '100%',
+          overflow: 'hidden',
+          overscrollBehavior: 'none',
+          fontFamily: 'system-ui, sans-serif',
+          background: '#0f0f0f',
+          color: '#fff',
+        }}
+      >
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            overflowY: 'auto',
+            overscrollBehaviorY: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
         <div style={{ maxWidth: 400, textAlign: 'center' }}>
           <h2 style={{ marginBottom: 16, fontSize: 18 }}>Произошла ошибка</h2>
           <p style={{ marginBottom: 24, color: '#888', fontSize: 14 }}>
@@ -53,6 +76,7 @@ export default function GlobalError({
               Обновить страницу
             </button>
           </div>
+        </div>
         </div>
       </body>
     </html>

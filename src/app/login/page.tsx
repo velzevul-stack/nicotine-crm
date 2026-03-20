@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getTelegramWebApp, waitForTelegramInitData } from '@/lib/telegram-mini-app';
+import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -182,7 +183,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <ViewportScrollShell maxWidth="md" mainClassName={viewportMainCentered}>
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle>Вход в систему</CardTitle>
@@ -209,6 +210,6 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </ViewportScrollShell>
   );
 }

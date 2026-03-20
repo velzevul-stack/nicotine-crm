@@ -4,6 +4,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
 
 interface Props {
   children: ReactNode;
@@ -63,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       // Иначе показываем стандартный UI ошибки
       return (
-        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <ViewportScrollShell maxWidth="md" mainClassName={viewportMainCentered}>
           <Card className="max-w-md w-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
@@ -108,7 +109,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </ViewportScrollShell>
       );
     }
 

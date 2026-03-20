@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/auth-utils';
 import { AppLayout } from '@/components/AppLayout';
+import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
 import { getDataSource } from '@/lib/db/data-source';
 import { SystemSettingsEntity, UserEntity } from '@/lib/db/entities';
 
@@ -71,7 +72,7 @@ export default async function SellerLayout({
   // Проверка режима обслуживания
   if (result.maintenanceEnabled) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <ViewportScrollShell maxWidth="md" mainClassName={viewportMainCentered}>
         <div className="max-w-md w-full text-center space-y-4">
           <h1 className="text-2xl font-bold text-foreground">
             Техническое обслуживание
@@ -80,7 +81,7 @@ export default async function SellerLayout({
             {result.maintenanceMessage || 'Система находится на техническом обслуживании. Пожалуйста, попробуйте позже.'}
           </p>
         </div>
-      </div>
+      </ViewportScrollShell>
     );
   }
 

@@ -5,6 +5,8 @@ import { AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
+import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
+import { cn } from '@/lib/utils';
 
 export default function SubscriptionExpiredPage() {
   const { data: shopData } = useQuery({
@@ -16,7 +18,7 @@ export default function SubscriptionExpiredPage() {
   const telegramUsername = shopData?.supportTelegramUsername?.replace('@', '');
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+    <ViewportScrollShell maxWidth="md" mainClassName={cn(viewportMainCentered, 'p-6')}>
       <div className="w-full max-w-md bg-card rounded-[24px] p-8 border border-border">
         <div className="flex flex-col items-center text-center">
           <div className="p-4 bg-destructive/20 rounded-[20px] mb-4">
@@ -55,6 +57,6 @@ export default function SubscriptionExpiredPage() {
           </div>
         </div>
       </div>
-    </div>
+    </ViewportScrollShell>
   );
 }

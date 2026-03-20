@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
 
 export default function Error({
   error,
@@ -19,7 +20,7 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <ViewportScrollShell maxWidth="md" mainClassName={viewportMainCentered}>
       <Card className="max-w-md w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
@@ -51,6 +52,6 @@ export default function Error({
           </div>
         </CardContent>
       </Card>
-    </div>
+    </ViewportScrollShell>
   );
 }

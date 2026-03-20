@@ -2,10 +2,18 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Clock } from 'lucide-react';
+import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
+import { cn } from '@/lib/utils';
 
 export default function ClientPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-background to-secondary/20">
+    <ViewportScrollShell
+      maxWidth="md"
+      mainClassName={cn(
+        viewportMainCentered,
+        'bg-gradient-to-br from-background via-background to-secondary/20'
+      )}
+    >
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -23,6 +31,6 @@ export default function ClientPage() {
           </p>
         </CardContent>
       </Card>
-    </div>
+    </ViewportScrollShell>
   );
 }

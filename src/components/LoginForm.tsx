@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getTelegramWebApp, waitForTelegramInitData } from '@/lib/telegram-mini-app';
+import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
+import { cn } from '@/lib/utils';
 
 const STORAGE_KEY = 'telegram_access_key';
 
@@ -178,7 +180,7 @@ export function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+    <ViewportScrollShell maxWidth="md" mainClassName={cn(viewportMainCentered, 'p-6')}>
       <div className="w-full max-w-md">
         <div className="bg-card rounded-[24px] p-8 border border-border">
           <div className="flex flex-col items-center mb-8">
@@ -219,6 +221,6 @@ export function LoginForm() {
           </form>
         </div>
       </div>
-    </div>
+    </ViewportScrollShell>
   );
 }
