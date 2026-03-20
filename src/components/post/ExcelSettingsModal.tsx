@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Download, Send, Upload, ImageIcon } from 'lucide-react';
+import { downloadBlobAsFile } from '@/lib/download-blob';
 
 const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_APP_URL ?? '');
 
@@ -49,14 +50,9 @@ export function ExcelSettingsModal({
         throw new Error(err.message || 'Ошибка генерации');
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'table.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
-      toast({ title: 'Excel скачан', description: 'Файл table.xlsx сохранён' });
-      onOpenChange(false);
+      await downloadBlobAsFile(blob, 'table.xlsx');
+      toast({ title: 'Excel готов', description: 'Сохраните или поделитесь файлом table.xlsx' });
+      window.setTimeout(() => onOpenChange(false), 400);
     } catch (e) {
       toast({
         title: 'Ошибка',

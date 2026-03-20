@@ -82,7 +82,7 @@ export function HourlyChartCard({ data, delay = 0 }: HourlyChartCardProps) {
         </div>
       </div>
 
-      <div className="h-[200px] -mx-2 overflow-hidden">
+      <div className="h-[200px] min-h-[200px] min-w-0 -mx-2 overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentPage}
@@ -90,9 +90,9 @@ export function HourlyChartCard({ data, delay = 0 }: HourlyChartCardProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="h-full w-full"
+              className="h-[200px] w-full min-w-0"
             >
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height={200} minWidth={0}>
                 <ComposedChart data={paginatedData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
                 <XAxis
                   dataKey="hour"

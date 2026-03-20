@@ -92,8 +92,8 @@ export function ChartCard({
           {displayTotal}
         </p>
       </div>
-      <div className="h-[180px] -mx-2">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-[180px] min-w-0 -mx-2">
+        <ResponsiveContainer width="100%" height={180} minWidth={0}>
           <BarChart data={weekData}>
             <XAxis
               dataKey="day"
