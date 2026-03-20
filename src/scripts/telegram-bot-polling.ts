@@ -30,11 +30,11 @@ import {
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
 import { generateStockTable } from '@/lib/excel/table-generator';
+import { sendTelegramDocument } from '@/lib/telegram/send-document';
 import { isSameDay } from 'date-fns';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import FormData from 'form-data';
 
 // Импорты модулей
 import { handleProfile, handleRoleSwitch, confirmRoleSwitch } from './bot/commands/profile';
@@ -2225,17 +2225,27 @@ bot.action(/^post_(.+)$/, async (ctx) => {
         outputPath
       );
 
-      const formData = new FormData();
-      formData.append('chat_id', String(userId));
-      formData.append('document', fs.createReadStream(outputPath), 'table.xlsx');
-
-      await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
-        method: 'POST',
-        body: formData as any,
-        headers: formData.getHeaders(),
+      const sendResult = await sendTelegramDocument({
+        botToken,
+        chatId: String(userId),
+        filePath: outputPath,
+        filename: 'table.xlsx',
       });
 
       fs.unlinkSync(outputPath);
+
+      if (!sendResult.ok) {
+        console.error('[Bot] Excel sendDocument:', sendResult.description, sendResult.errorCode);
+        await bot.telegram.editMessageText(
+          ctx.chat!.id,
+          statusMsg.message_id,
+          undefined,
+          `❌ Не удалось отправить файл: ${sendResult.description}`
+        );
+        await ctx.answerCbQuery('❌ Ошибка отправки');
+        return;
+      }
+
       await bot.telegram.deleteMessage(ctx.chat!.id, statusMsg.message_id);
       await ctx.answerCbQuery('✅ Таблица отправлена');
     } catch (err) {

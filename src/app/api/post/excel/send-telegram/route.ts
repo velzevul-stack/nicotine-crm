@@ -9,10 +9,13 @@ import {
   StockItemEntity,
 } from '@/lib/db/entities';
 import { generateStockTable } from '@/lib/excel/table-generator';
+import {
+  isTelegramUserNumericId,
+  sendTelegramDocument,
+} from '@/lib/telegram/send-document';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import FormData from 'form-data';
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -22,6 +25,16 @@ export async function POST(request: NextRequest) {
 
   if (!botToken) {
     return NextResponse.json({ message: 'Telegram bot not configured' }, { status: 500 });
+  }
+
+  if (!isTelegramUserNumericId(session.telegramId)) {
+    return NextResponse.json(
+      {
+        message:
+          'Отправка в Telegram недоступна: у аккаунта нет числового Telegram ID. Откройте приложение из Telegram или войдите через бота (не только по ключу с сайта).',
+      },
+      { status: 400 }
+    );
   }
 
   const body = await request.json().catch(() => ({}));
@@ -89,24 +102,24 @@ export async function POST(request: NextRequest) {
       outputPath
     );
 
-    const formData = new FormData();
-    formData.append('chat_id', session.telegramId);
-    formData.append('document', fs.createReadStream(outputPath), 'table.xlsx');
-
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
-      method: 'POST',
-      body: formData as any,
-      headers: formData.getHeaders(),
+    const sendResult = await sendTelegramDocument({
+      botToken,
+      chatId: session.telegramId.trim(),
+      filePath: outputPath,
+      filename: 'table.xlsx',
     });
 
     fs.unlinkSync(outputPath);
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('Telegram sendDocument error:', err);
+    if (!sendResult.ok) {
+      console.error('Telegram sendDocument error:', {
+        description: sendResult.description,
+        errorCode: sendResult.errorCode,
+        chatId: session.telegramId,
+      });
       return NextResponse.json(
-        { message: 'Failed to send to Telegram' },
-        { status: 500 }
+        { message: sendResult.description || 'Не удалось отправить файл в Telegram' },
+        { status: 502 }
       );
     }
 
