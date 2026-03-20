@@ -113,9 +113,11 @@ async function seed() {
     
     const ds = seedDataSource;
 
-    // Create user + shop if not exist
+    // Create user + shop if not exist (OR: by telegramId or by accessKey — idempotent when key already exists)
     const userRepo = ds.getRepository(UserEntity);
-    let user = await userRepo.findOne({ where: { telegramId: 'dev-user-1' } });
+    let user = await userRepo.findOne({
+      where: [{ telegramId: 'dev-user-1' }, { accessKey: devAccessKey }],
+    });
     if (!user) {
       console.log('Creating dev user...');
       
@@ -143,6 +145,11 @@ async function seed() {
       // Обновляем поля, если их нет у существующего пользователя
       let updated = false;
       if (!user.accessKey || user.accessKey !== devAccessKey) {
+        const conflictingUser = await userRepo.findOne({ where: { accessKey: devAccessKey } });
+        if (conflictingUser && conflictingUser.id !== user.id) {
+          conflictingUser.accessKey = null;
+          await userRepo.save(conflictingUser);
+        }
         user.accessKey = devAccessKey;
         updated = true;
       }
