@@ -57,7 +57,7 @@ const BARCODE_FORMATS: Html5QrcodeSupportedFormats[] = [
 ];
 
 const MIN_GAP_MS = 500;
-const SAME_CODE_COOLDOWN_MS = 2200;
+const SAME_CODE_COOLDOWN_MS = 1500;
 
 interface ScanModalProps {
   open: boolean;
@@ -119,22 +119,23 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
         });
         scannerRef.current = scanner;
 
-        const vw = typeof window !== 'undefined' ? window.innerWidth : 320;
-        // Компактное окно: не на весь экран; для 1D — широкая «полоска»
-        const maxPreviewW = Math.min(260, vw - 40);
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 360;
+        const maxPreviewW = Math.min(360, vw - 32);
 
         const config = {
-          fps: 4,
+          fps: 6,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const w = Math.min(maxPreviewW, Math.floor(viewfinderWidth * 0.92));
-            const h = Math.min(100, Math.max(72, Math.floor(viewfinderHeight * 0.22)));
+            const w = Math.min(maxPreviewW, Math.floor(viewfinderWidth * 0.94));
+            const h = Math.min(180, Math.max(120, Math.floor(viewfinderHeight * 0.38)));
             return { width: w, height: h };
           },
-          aspectRatio: 1.6,
+          aspectRatio: 1.25,
           videoConstraints: {
             facingMode: 'environment',
-            width: { ideal: 640, max: 960 },
-            height: { ideal: 480, max: 720 },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            // Неподдерживаемые поля игнорируются браузером; на части Android даёт непрерывный автофокус
+            advanced: [{ focusMode: 'continuous' }],
           } as MediaTrackConstraints,
         };
 
@@ -219,24 +220,24 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-sm">
+      <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ScanLine className="w-5 h-5" />
             Скан штрихкода
           </DialogTitle>
           <DialogDescription className="text-left text-xs text-muted-foreground">
-            EAN, Code 128, UPC и др. Звук при успешном чтении. Повтор того же кода — не чаще чем раз в ~2 с.
+            EAN, Code 128, UPC и др. Звук при успешном чтении. Повтор того же кода — не чаще чем раз в ~1.5 с.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {!error ? (
-            <div className="mx-auto w-full max-w-[260px]">
+            <div className="mx-auto w-full max-w-[min(100%,360px)]">
               <div
                 key={readerId}
                 id={readerId}
-                className="w-full h-[200px] overflow-hidden rounded-xl bg-black border border-white/10 shadow-inner [&_video]:object-cover [&_video]:max-h-[200px]"
+                className="w-full h-[min(52vh,360px)] min-h-[240px] overflow-hidden rounded-xl bg-black border border-white/10 shadow-inner [&_video]:h-full [&_video]:w-full [&_video]:object-cover"
               />
             </div>
           ) : (
