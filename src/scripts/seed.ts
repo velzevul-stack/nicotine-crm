@@ -1,5 +1,5 @@
 /**
- * Seed script: creates initial shop, categories, brands, products, flavors, stock.
+ * Seed script: shop, inventory, demo sales/debts/cards/reservations/post format.
  * Run: npx tsx src/scripts/seed.ts
  */
 import 'reflect-metadata';
@@ -70,6 +70,9 @@ async function seed() {
       DebtOperationEntity,
       PostFormatEntity,
       PostFormatSuggestionEntity,
+      CardEntity,
+      UserStatsEntity,
+      SystemSettingsEntity,
     } = await import('../lib/db/entities');
     
     console.log('Importing crypto utils...');
@@ -104,6 +107,9 @@ async function seed() {
         DebtOperationEntity,
         PostFormatEntity,
         PostFormatSuggestionEntity,
+        CardEntity,
+        UserStatsEntity,
+        SystemSettingsEntity,
       ],
     });
 
@@ -178,7 +184,7 @@ async function seed() {
     }
 
     const shopRepo = ds.getRepository(ShopEntity);
-    let shop = await shopRepo.findOne({ where: {} });
+    let shop = await shopRepo.findOne({ where: { ownerId: user.id } });
     if (!shop) {
       console.log('Creating shop...');
       shop = shopRepo.create({
@@ -385,6 +391,9 @@ async function seed() {
         await stockRepo.save(stock);
       }
     }
+
+    const { seedShopDemoTransactions } = await import('./lib/seed-shop-demo-transactions');
+    await seedShopDemoTransactions(ds, { shopId: shop.id, sellerId: user.id });
 
     console.log('Seed OK: shop', shop.id);
     await ds.destroy();

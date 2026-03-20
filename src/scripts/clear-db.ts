@@ -52,6 +52,8 @@ async function clearDatabase() {
       DebtOperationEntity,
       PostFormatEntity,
       PostFormatSuggestionEntity,
+      CardEntity,
+      UserStatsEntity,
     } = await import('../lib/db/entities');
     
     console.log('Импорт DataSource...');
@@ -82,6 +84,8 @@ async function clearDatabase() {
         DebtOperationEntity,
         PostFormatEntity,
         PostFormatSuggestionEntity,
+        CardEntity,
+        UserStatsEntity,
       ],
     });
 
@@ -107,8 +111,10 @@ async function clearDatabase() {
       { name: 'categories', entity: CategoryEntity },
       { name: 'post_format_suggestions', entity: PostFormatSuggestionEntity },
       { name: 'post_formats', entity: PostFormatEntity },
+      { name: 'cards', entity: CardEntity },
       { name: 'user_shops', entity: UserShopEntity },
       { name: 'shops', entity: ShopEntity },
+      { name: 'user_stats', entity: UserStatsEntity },
       { name: 'users', entity: UserEntity },
     ];
 

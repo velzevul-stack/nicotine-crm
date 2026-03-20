@@ -1,12 +1,19 @@
 /**
- * Скрипт для назначения пользователя админом
- * Использование: npx tsx src/scripts/make-admin.ts <telegramId или accessKey>
+ * Назначить пользователя админом.
+ *
+ *   npx tsx src/scripts/make-admin.ts <telegramId | accessKey>
+ *   npx tsx src/scripts/make-admin.ts --sole-admin <accessKey>
+ *
+ * --sole-admin — снять роль admin со всех остальных, оставить одного;
+ *   для строки вида KEY-... ключ в БД приводится к верхнему регистру (как у generateAccessKey).
  */
 import 'reflect-metadata';
 import fs from 'fs';
 import path from 'path';
 
-console.log('Starting make-admin script...');
+import { accessKeySearchCandidates } from './lib/access-key-resolve';
+import { In, type Repository } from 'typeorm';
+import type { User } from '../lib/db/entities';
 
 // Manual .env loading
 const envPath = path.resolve(process.cwd(), '.env');
@@ -24,16 +31,53 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-async function makeAdmin() {
-  try {
-    const identifier = process.argv[2];
-    if (!identifier) {
-      console.error('Usage: npx tsx src/scripts/make-admin.ts <telegramId или accessKey>');
-      console.error('Example: npx tsx src/scripts/make-admin.ts dev-user-1');
-      console.error('Example: npx tsx src/scripts/make-admin.ts KEY-your-access-key');
-      process.exit(1);
-    }
+function looksLikeAccessKey(s: string): boolean {
+  const t = s.trim();
+  if (t.toUpperCase().startsWith('KEY-')) return true;
+  return /^[0-9a-f]{64}$/i.test(t);
+}
 
+function normalizeAccessKey(input: string): string {
+  const t = input.trim();
+  const u = t.toUpperCase();
+  if (u.startsWith('KEY-')) return u;
+  return `KEY-${u}`;
+}
+
+function printUsage(): void {
+  console.error('Использование:');
+  console.error('  npx tsx src/scripts/make-admin.ts <telegramId или accessKey>');
+  console.error('  npx tsx src/scripts/make-admin.ts --sole-admin <accessKey>');
+  console.error('');
+  console.error('Примеры:');
+  console.error('  npx tsx src/scripts/make-admin.ts dev-user-1');
+  console.error('  npx tsx src/scripts/make-admin.ts KEY-...');
+  console.error('  npx tsx src/scripts/make-admin.ts --sole-admin KEY-...');
+}
+
+async function findUser(userRepo: Repository<User>, identifier: string) {
+  const byTg = await userRepo.findOne({ where: { telegramId: identifier.trim() } });
+  if (byTg) return byTg;
+
+  const candidates = accessKeySearchCandidates(identifier);
+  if (candidates.length === 0) return null;
+
+  return userRepo.findOne({
+    where: { accessKey: In(candidates) },
+  });
+}
+
+async function makeAdmin() {
+  const rawArgs = process.argv.slice(2);
+  const soleAdmin = rawArgs.includes('--sole-admin');
+  const identifier = rawArgs.filter((a) => a !== '--sole-admin')[0]?.trim();
+
+  if (!identifier) {
+    printUsage();
+    process.exit(1);
+  }
+
+  try {
     const { DataSource } = await import('typeorm');
     const { UserEntity } = await import('../lib/db/entities');
 
@@ -50,62 +94,74 @@ async function makeAdmin() {
     });
 
     await ds.initialize();
-    console.log('Connected to database');
+    console.log('Подключено к базе');
 
     const userRepo = ds.getRepository(UserEntity);
-    
-    // Ищем пользователя по telegramId или accessKey
-    let user = await userRepo.findOne({
-      where: [
-        { telegramId: identifier },
-        { accessKey: identifier },
-      ],
-    });
+
+    let user = await findUser(userRepo, identifier);
 
     if (!user) {
-      console.error(`Пользователь не найден: ${identifier}`);
-      console.log('\nДоступные пользователи:');
-      const allUsers = await userRepo.find();
-      allUsers.forEach((u) => {
-        console.log(`  - telegramId: ${u.telegramId}, accessKey: ${u.accessKey}, role: ${u.role}`);
-      });
+      console.error('Пользователь не найден (проверьте telegramId или ключ, и что .env указывает на ту же БД, что и приложение).');
+      console.log('\nПользователи (telegramId, роль, длина ключа):');
+      const allUsers = await userRepo.find({ order: { createdAt: 'ASC' } });
+      for (const u of allUsers) {
+        const kl = u.accessKey?.length ?? 0;
+        console.log(`  - ${u.telegramId}  role=${u.role}  keyLen=${kl}  active=${u.isActive}`);
+      }
+      await ds.destroy();
       process.exit(1);
     }
 
-    console.log(`Найден пользователь: ${user.telegramId || user.accessKey}`);
-    console.log(`Текущая роль: ${user.role}`);
-    console.log(`Access Key: ${user.accessKey || '(не установлен)'}`);
-    console.log(`Access Key длина: ${user.accessKey?.length || 0}`);
-
-    // Генерируем accessKey, если его нет
-    if (!user.accessKey) {
+    if (soleAdmin && looksLikeAccessKey(identifier)) {
+      const normalized = normalizeAccessKey(identifier);
+      if (user.accessKey !== normalized) {
+        const other = await userRepo.findOne({ where: { accessKey: normalized } });
+        if (other && other.id !== user.id) {
+          other.accessKey = null;
+          await userRepo.save(other);
+          console.log('Снят дублирующий ключ с другого пользователя');
+        }
+        user.accessKey = normalized;
+      }
+    } else if (!user.accessKey) {
       const { generateAccessKey } = await import('../lib/utils/crypto');
       user.accessKey = generateAccessKey();
-      console.log(`\n⚠️  Access Key отсутствовал, сгенерирован новый: ${user.accessKey}`);
+      console.log('Ключ отсутствовал — сгенерирован новый (сохраните из вывода ниже)');
     }
 
-    if (user.role === 'admin') {
-      console.log('\nПользователь уже является админом!');
-      // Сохраняем accessKey, если он был сгенерирован
-      if (user.accessKey) {
-        await userRepo.save(user);
-        console.log('✅ Access Key сохранён');
+    const others = await userRepo.find({ where: { role: 'admin' } });
+    if (soleAdmin) {
+      for (const u of others) {
+        if (u.id === user.id) continue;
+        u.role = 'seller';
+        await userRepo.save(u);
+        console.log(`Снята роль admin: ${u.telegramId}`);
       }
-    } else {
-      user.role = 'admin';
-      user.subscriptionStatus = 'active';
-      user.subscriptionEndsAt = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000); // 10 лет
-      await userRepo.save(user);
-      console.log('\n✅ Пользователь успешно назначен админом!');
-      console.log(`   Роль: ${user.role}`);
-      console.log(`   Подписка: ${user.subscriptionStatus} до ${user.subscriptionEndsAt?.toLocaleDateString('ru-RU')}`);
-      console.log(`   Access Key: ${user.accessKey}`);
+    }
+
+    user.role = 'admin';
+    user.isActive = true;
+    user.subscriptionStatus = 'active';
+    user.subscriptionEndsAt = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000);
+
+    await userRepo.save(user);
+
+    console.log('');
+    console.log('✅ Готово');
+    console.log(`   telegramId: ${user.telegramId}`);
+    console.log(`   роль: ${user.role}`);
+    console.log(`   isActive: ${user.isActive}`);
+    console.log(`   подписка: ${user.subscriptionStatus} до ${user.subscriptionEndsAt?.toLocaleDateString('ru-RU')}`);
+    console.log(`   accessKey: ${user.accessKey}`);
+    if (!soleAdmin && others.length > 1) {
+      console.log('');
+      console.log('(Другие admin в базе не трогались. Чтобы оставить одного: добавьте --sole-admin)');
     }
 
     await ds.destroy();
     process.exit(0);
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Ошибка:', error);
     process.exit(1);
   }
 }
