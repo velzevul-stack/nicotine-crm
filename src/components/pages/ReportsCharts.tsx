@@ -67,7 +67,7 @@ const RevenueProfitChart = memo(({ data, currency, totalRevenue, periodType }: {
   const barSize = calculateBarSize();
   
   return (
-    <ResponsiveContainer width="100%" height={250}>
+    <ResponsiveContainer width="100%" height={250} minHeight={200} minWidth={0}>
       <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.2} />
         <XAxis 
@@ -150,7 +150,7 @@ const SalesBarChart = memo(({ data, periodType }: { data: ChartData[]; periodTyp
   const barSize = calculateBarSize();
   
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <ResponsiveContainer width="100%" height={200} minHeight={160} minWidth={0}>
       <BarChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.2} />
         <XAxis 
@@ -197,7 +197,7 @@ const SalesBarChart = memo(({ data, periodType }: { data: ChartData[]; periodTyp
 SalesBarChart.displayName = 'SalesBarChart';
 
 const PaymentPieChart = memo(({ data, currency }: { data: PaymentData[]; currency?: string }) => (
-  <ResponsiveContainer width="100%" height={200}>
+  <ResponsiveContainer width="100%" height={200} minHeight={160} minWidth={0}>
     <RechartsPieChart>
       <Pie
         data={data}
@@ -243,15 +243,28 @@ PaymentPieChart.displayName = 'PaymentPieChart';
 
 
 const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics, currency, periodType }: ReportsChartsSectionProps) => {
+  if (!chartData.length) {
+    return (
+      <div className="px-5 mb-4">
+        <div className="rounded-[16px] border border-white/10 bg-[#1B2030] p-6 text-center">
+          <p className="text-sm font-medium text-[#F5F5F7] mb-1">Нет данных для графиков</p>
+          <p className="text-xs text-[#9CA3AF]">
+            За выбранный период нет строк отчёта — графики появятся после продаж.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="px-5 mb-4 space-y-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-[#1B2030] rounded-[16px] p-3 border border-white/10 border-l-4 border-l-primary/40">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+          <p className="text-xs text-[#9CA3AF] uppercase tracking-wider mb-1">
             Средняя выручка
           </p>
-          <p className="font-mono-nums font-bold text-lg text-primary">
+          <p className="font-mono-nums font-bold text-lg text-[#BFE7E5]">
             {formatCurrency(analytics.avgRevenue, currency)}
           </p>
           {analytics.revenueTrend !== 0 && (
@@ -268,13 +281,13 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
           )}
         </div>
         <div className="bg-[#1B2030] rounded-[16px] p-3 border border-white/10 border-l-4 border-l-success/40">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+          <p className="text-xs text-[#9CA3AF] uppercase tracking-wider mb-1">
             Средняя прибыль
           </p>
-          <p className="font-mono-nums font-bold text-lg text-success">
+          <p className="font-mono-nums font-bold text-lg text-[#86EFAC]">
             {formatCurrency(analytics.avgProfit, currency)}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <p className="text-[10px] text-[#9CA3AF] mt-1">
             {analytics.avgSales.toFixed(1)} продаж/день
           </p>
         </div>
@@ -284,12 +297,12 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
       <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <LineChart size={20} className="text-primary" />
-            <h3 className="font-bold text-base">Динамика выручки и прибыли</h3>
+            <LineChart size={20} className="text-[#BFE7E5]" />
+            <h3 className="font-bold text-base text-[#F5F5F7]">Динамика выручки и прибыли</h3>
           </div>
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Всего</p>
-            <p className="font-mono-nums font-bold text-sm text-primary">
+            <p className="text-xs text-[#9CA3AF]">Всего</p>
+            <p className="font-mono-nums font-bold text-sm text-[#BFE7E5]">
               {formatCurrency(analytics.totalRevenue, currency)}
             </p>
           </div>
@@ -302,10 +315,10 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
         <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10 min-h-[280px]">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={18} className="text-[#DED8F6]" />
-            <h3 className="font-bold text-sm">Продаж в день</h3>
+            <h3 className="font-bold text-sm text-[#F5F5F7]">Продаж в день</h3>
           </div>
           <div className="mb-2">
-            <p className="text-xs text-muted-foreground">Всего продаж</p>
+            <p className="text-xs text-[#9CA3AF]">Всего продаж</p>
             <p className="font-mono-nums font-bold text-lg text-[#DED8F6]">{analytics.totalSales}</p>
           </div>
           <div className="h-[200px] w-full">
@@ -317,10 +330,10 @@ const ReportsChartsSectionComponent = memo(({ chartData, paymentData, analytics,
           <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10">
             <div className="flex items-center gap-2 mb-4">
               <PieChart size={18} className="text-[#F2D6DE]" />
-              <h3 className="font-bold text-sm">Типы оплаты</h3>
+              <h3 className="font-bold text-sm text-[#F5F5F7]">Типы оплаты</h3>
             </div>
             <div className="mb-2">
-              <p className="text-xs text-muted-foreground">Всего получено</p>
+              <p className="text-xs text-[#9CA3AF]">Всего получено</p>
               <p className="font-mono-nums font-bold text-lg text-[#F2D6DE]">
                 {formatCurrency(analytics.totalPayments, currency)}
               </p>

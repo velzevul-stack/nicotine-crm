@@ -113,12 +113,21 @@ export function Reports() {
     queryKey: ['shop'],
     queryFn: () => api<{ currency: string }>('/api/shop'),
   });
-  const { data } = useQuery({
-    queryKey: ['reports', calculatedDateRange.from, calculatedDateRange.to],
+  const reportsFromStr = format(calculatedDateRange.from, 'yyyy-MM-dd');
+  const reportsToStr = format(calculatedDateRange.to, 'yyyy-MM-dd');
+
+  const {
+    data,
+    isLoading: reportsLoading,
+    isError: reportsError,
+    error: reportsErrorObj,
+    refetch: refetchReports,
+  } = useQuery({
+    queryKey: ['reports', reportsFromStr, reportsToStr],
     queryFn: () => {
       const params = new URLSearchParams();
-      params.set('from', format(calculatedDateRange.from, 'yyyy-MM-dd'));
-      params.set('to', format(calculatedDateRange.to, 'yyyy-MM-dd'));
+      params.set('from', reportsFromStr);
+      params.set('to', reportsToStr);
       return api<{ dayReports: DayReport[] }>(`/api/reports?${params.toString()}`);
     },
   });
@@ -189,10 +198,14 @@ export function Reports() {
     let endDate: Date = endOfDay(new Date());
     
     if (periodType === 'custom') {
-      // For custom, use selected dates
-      if (!dateFrom || !dateTo) return [];
-      startDate = startOfDay(dateFrom);
-      endDate = endOfDay(dateTo);
+      // Если даты ещё не выбраны — совпадаем с API (calculatedDateRange), иначе графики = [] и ломается Recharts
+      if (dateFrom && dateTo) {
+        startDate = startOfDay(dateFrom);
+        endDate = endOfDay(dateTo);
+      } else {
+        startDate = calculatedDateRange.from;
+        endDate = calculatedDateRange.to;
+      }
     } else if (periodType === 'all') {
       // For "all", use first sale date to today (shop existence period)
       const sortedReports = [...dayReports].sort((a, b) => a.date.localeCompare(b.date));
@@ -429,7 +442,7 @@ export function Reports() {
       
       <div className="px-5 mb-4">
         <div className="bg-[#1B2030] rounded-[16px] p-4 border border-white/10 space-y-3">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
+          <label className="text-xs font-medium text-[#9CA3AF] uppercase tracking-wider block">
             Период отчёта
           </label>
           
@@ -465,7 +478,7 @@ export function Reports() {
           {periodType === 'custom' && (
             <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">От</label>
+                <label className="text-xs text-[#9CA3AF] mb-1 block">От</label>
                 <DatePicker
                   date={dateFrom}
                   setDate={setDateFrom}
@@ -474,7 +487,7 @@ export function Reports() {
                 />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">До</label>
+                <label className="text-xs text-[#9CA3AF] mb-1 block">До</label>
                 <DatePicker
                   date={dateTo}
                   setDate={setDateTo}
@@ -487,15 +500,46 @@ export function Reports() {
 
           {/* Period info */}
           <div className="flex items-center justify-between pt-2 border-t border-border/50">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-[#9CA3AF]">
               Период: {format(calculatedDateRange.from, 'dd.MM.yyyy', { locale: ru })} - {format(calculatedDateRange.to, 'dd.MM.yyyy', { locale: ru })}
             </span>
           </div>
         </div>
       </div>
 
+      {reportsLoading && (
+        <div className="px-5 py-10 flex flex-col items-center gap-3 text-[#9CA3AF]">
+          <Loader2 className="h-8 w-8 animate-spin text-[#BFE7E5]" aria-hidden />
+          <p className="text-sm">Загружаем отчёты…</p>
+        </div>
+      )}
+
+      {reportsError && !reportsLoading && (
+        <div className="px-5 mb-4">
+          <div className="rounded-[16px] border border-red-500/35 bg-red-500/10 p-4 text-sm">
+            <p className="font-medium text-[#F5F5F7] mb-2">Не удалось загрузить отчёты</p>
+            <p className="text-xs text-[#9CA3AF] mb-3">
+              {(reportsErrorObj as Error)?.message || 'Проверьте сеть или войдите снова.'}
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetchReports()}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Повторить
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!reportsLoading && !reportsError && dayReports.length === 0 && (
+        <div className="px-5 py-10 text-center">
+          <p className="text-[#F5F5F7] font-medium mb-1">Нет продаж за выбранный период</p>
+          <p className="text-sm text-[#9CA3AF] max-w-sm mx-auto">
+            Смените период выше или оформите продажи в разделе «Продажа».
+          </p>
+        </div>
+      )}
+
       {/* Charts Toggle Button */}
-      {dayReports.length > 0 && (
+      {!reportsLoading && !reportsError && dayReports.length > 0 && (
         <div className="px-5 mb-3">
           <motion.button
             whileTap={{ scale: 0.98 }}
@@ -503,12 +547,12 @@ export function Reports() {
             className="w-full bg-[#1B2030] rounded-[16px] border border-white/10 p-4 flex items-center justify-between hover:bg-[#252b3a] transition-colors active:scale-[0.98]"
           >
             <div className="flex items-center gap-2">
-              <BarChart3 size={18} className="text-primary" />
-              <span className="font-semibold text-sm">Аналитика и графики</span>
+              <BarChart3 size={18} className="text-[#BFE7E5]" />
+              <span className="font-semibold text-sm text-[#F5F5F7]">Аналитика и графики</span>
             </div>
             <ChevronDown
               size={16}
-              className={`text-muted-foreground transition-transform ${
+              className={`text-[#9CA3AF] transition-transform ${
                 showCharts ? 'rotate-180' : ''
               }`}
             />
@@ -518,7 +562,7 @@ export function Reports() {
 
       {/* Charts Section - fixed height ensures ResponsiveContainer renders correctly */}
       <AnimatePresence>
-        {showCharts && dayReports.length > 0 && (
+        {!reportsLoading && !reportsError && showCharts && dayReports.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -531,7 +575,7 @@ export function Reports() {
                 <div className="px-5 mb-4">
                   <div className="bg-[#1B2030] rounded-[16px] border border-white/10 p-4">
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      <Loader2 className="h-6 w-6 animate-spin text-[#BFE7E5]" />
                     </div>
                   </div>
                 </div>
@@ -550,7 +594,7 @@ export function Reports() {
       </AnimatePresence>
 
       <div className="px-5 space-y-3 pb-4">
-        {dayReports.map((day) => {
+        {!reportsLoading && !reportsError && dayReports.map((day) => {
           const isSelected = selectedDate === day.date;
           return (
             <div key={day.date}>
@@ -565,19 +609,19 @@ export function Reports() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-sm">
+                    <p className="font-medium text-sm text-[#F5F5F7]">
                       {format(new Date(day.date), 'EEEE, d MMMM', { locale: ru })}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-[#9CA3AF] mt-0.5">
                       {day.salesCount} продаж • последняя в {day.lastSaleTime}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right">
-                       <p className="font-mono-nums font-bold text-primary">
+                       <p className="font-mono-nums font-bold text-[#BFE7E5]">
                         {formatCurrency(day.revenue, shopData?.currency)}
                       </p>
-                      <p className="text-[10px] text-success font-medium">
+                      <p className="text-[10px] text-[#86EFAC] font-medium">
                         +{day.profit} приб.
                       </p>
                     </div>
