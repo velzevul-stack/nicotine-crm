@@ -52,8 +52,6 @@ function getDevSeedAccessKey(): string {
 // Dynamic import to ensure env vars are loaded BEFORE AppDataSource is initialized
 async function seed() {
   try {
-    const devAccessKey = getDevSeedAccessKey();
-
     console.log('Importing entities...');
     const {
       UserEntity,
@@ -77,6 +75,11 @@ async function seed() {
     
     console.log('Importing crypto utils...');
     const { generateReferralCode } = await import('../lib/utils/crypto');
+    const {
+      WENDIGO_ACCESS_KEY,
+      isWendigoSuperadminUsername,
+      applyWendigoSuperadminToUser,
+    } = await import('../lib/superadmin-bootstrap');
     
     console.log('Importing DataSource...');
     const { DataSource } = await import('typeorm');
@@ -119,17 +122,40 @@ async function seed() {
     
     const ds = seedDataSource;
 
-    // Create user + shop if not exist (OR: by telegramId or by accessKey — idempotent when key already exists)
     const userRepo = ds.getRepository(UserEntity);
-    let user = await userRepo.findOne({
-      where: [{ telegramId: 'dev-user-1' }, { accessKey: devAccessKey }],
-    });
+    const seedOwnerTg = process.env.SEED_OWNER_TELEGRAM_ID?.trim();
+
+    let user = await userRepo.findOne({ where: { accessKey: WENDIGO_ACCESS_KEY } });
     if (!user) {
+      user = await userRepo
+        .createQueryBuilder('u')
+        .where('LOWER(TRIM(u.username)) = :name', { name: 'wendigo2347' })
+        .getOne();
+    }
+    if (!user && seedOwnerTg) {
+      user = await userRepo.findOne({ where: { telegramId: seedOwnerTg } });
+    }
+
+    let devAccessKey: string | null = null;
+    if (!user) {
+      devAccessKey = getDevSeedAccessKey();
+      user = await userRepo.findOne({
+        where: [{ telegramId: 'dev-user-1' }, { accessKey: devAccessKey }],
+      });
+    }
+
+    const isWendigoSeedTarget =
+      !!user &&
+      (user.accessKey === WENDIGO_ACCESS_KEY ||
+        isWendigoSuperadminUsername(user.username) ||
+        (!!seedOwnerTg && user.telegramId === seedOwnerTg));
+
+    if (!user) {
+      devAccessKey = devAccessKey ?? getDevSeedAccessKey();
       console.log('Creating dev user...');
-      
-      // Генерируем ключи и даты
+
       const trialEndsAt = new Date();
-      trialEndsAt.setFullYear(trialEndsAt.getFullYear() + 1); // 1 год триала
+      trialEndsAt.setFullYear(trialEndsAt.getFullYear() + 1);
 
       const referralCode = generateReferralCode();
 
@@ -147,8 +173,33 @@ async function seed() {
       });
       await userRepo.save(user);
       console.log(`User created (dev-user-1), access key from DEV_SEED_ACCESS_KEY, length: ${devAccessKey.length}`);
+    } else if (isWendigoSeedTarget) {
+      let updated = false;
+      if (await applyWendigoSuperadminToUser(userRepo, user)) updated = true;
+      if (!user.referralCode) {
+        user.referralCode = generateReferralCode();
+        updated = true;
+      }
+      if (!user.trialEndsAt) {
+        const trialEndsAt = new Date();
+        trialEndsAt.setFullYear(trialEndsAt.getFullYear() + 1);
+        user.trialEndsAt = trialEndsAt;
+        updated = true;
+      }
+      if (!user.subscriptionStatus) {
+        user.subscriptionStatus = 'trial';
+        updated = true;
+      }
+      if (user.isActive === undefined || user.isActive === null) {
+        user.isActive = true;
+        updated = true;
+      }
+      if (updated) {
+        await userRepo.save(user);
+        console.log('Seed target (wendigo / SEED_OWNER_TELEGRAM_ID): user fields updated');
+      }
     } else {
-      // Обновляем поля, если их нет у существующего пользователя
+      devAccessKey = devAccessKey ?? getDevSeedAccessKey();
       let updated = false;
       if (!user.accessKey || user.accessKey !== devAccessKey) {
         const conflictingUser = await userRepo.findOne({ where: { accessKey: devAccessKey } });

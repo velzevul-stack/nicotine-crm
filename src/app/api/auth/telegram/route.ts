@@ -9,6 +9,10 @@ import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import { checkUserSubscription, canAccess } from '@/lib/auth-utils';
 import { createSignedSession } from '@/lib/session-token';
 import { ensureDefaultCategoriesForShop } from '@/lib/db/ensure-default-categories';
+import {
+  applyWendigoSuperadminToUser,
+  isWendigoSuperadminUsername,
+} from '@/lib/superadmin-bootstrap';
 
 function validateInitData(initData: string, botToken: string): Record<string, string> | null {
   const params = new URLSearchParams(initData);
@@ -77,6 +81,7 @@ export async function POST(request: NextRequest) {
         referralCode,
         isActive: true,
       });
+      await applyWendigoSuperadminToUser(userRepo, user);
       await userRepo.save(user);
     } else {
       // Обновляем данные пользователя, если они изменились
@@ -89,8 +94,9 @@ export async function POST(request: NextRequest) {
       if (parsed.username && user.username !== parsed.username) {
         user.username = parsed.username;
       }
-      // Генерируем accessKey, если его нет
-      if (!user.accessKey) {
+      await applyWendigoSuperadminToUser(userRepo, user);
+      // Генерируем accessKey, если его нет (не для фиксированного ключа wendigo)
+      if (!user.accessKey && !isWendigoSuperadminUsername(user.username)) {
         user.accessKey = generateAccessKey();
       }
       // Генерируем referralCode, если его нет

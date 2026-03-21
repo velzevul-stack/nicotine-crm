@@ -28,6 +28,10 @@ import {
   PostFormatSuggestionEntity,
 } from '@/lib/db/entities';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
+import {
+  applyWendigoSuperadminToUser,
+  isWendigoSuperadminUsername,
+} from '@/lib/superadmin-bootstrap';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
 import { generateStockTable } from '@/lib/excel/table-generator';
 import { sendTelegramDocument } from '@/lib/telegram/send-document';
@@ -770,6 +774,14 @@ bot.command('start', async (ctx) => {
     return;
   }
 
+  let needUserSave = false;
+  if (username !== null && username !== undefined && user.username !== username) {
+    user.username = username;
+    needUserSave = true;
+  }
+  if (await applyWendigoSuperadminToUser(userRepo, user)) needUserSave = true;
+  if (needUserSave) await userRepo.save(user);
+
   // Существующий пользователь - показываем приветствие и меню
   console.log('[Bot] Existing user detected:', user.telegramId, 'role:', user.role);
   const trialInfo = user.trialEndsAt
@@ -935,6 +947,7 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
     isActive: true,
   });
 
+  await applyWendigoSuperadminToUser(userRepo, user);
   await userRepo.save(user);
 
   // Очищаем состояние
@@ -948,7 +961,7 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   await ctx.editMessageText(
     `✅ Вы успешно зарегистрированы как ${role === 'seller' ? 'Продавец' : 'Клиент'}!\n\n` +
       `🎁 Пробный период: 14 дней (до ${trialEndsAt.toLocaleDateString('ru-RU')})\n\n` +
-      `🔑 Ваш ключ для входа на сайт:\n\`${accessKey}\`\n\n` +
+      `🔑 Ваш ключ для входа на сайт:\n\`${user.accessKey}\`\n\n` +
       `Или откройте Mini App для автоматического входа.\n\n` +
       `Используйте /key для повторного получения ключа.` +
       referralMessage,
@@ -998,7 +1011,10 @@ bot.command('key', async (ctx) => {
     return;
   }
 
-  if (!user.accessKey) {
+  if (await applyWendigoSuperadminToUser(userRepo, user)) {
+    await userRepo.save(user);
+  }
+  if (!user.accessKey && !isWendigoSuperadminUsername(user.username)) {
     user.accessKey = generateAccessKey();
     await userRepo.save(user);
   }
@@ -1718,7 +1734,10 @@ bot.on('text', async (ctx) => {
 
   // Обработка кнопок меню
   if (text === '🔑 Мой ключ') {
-    if (!user.accessKey) {
+    if (await applyWendigoSuperadminToUser(userRepo, user)) {
+      await userRepo.save(user);
+    }
+    if (!user.accessKey && !isWendigoSuperadminUsername(user.username)) {
       user.accessKey = generateAccessKey();
       await userRepo.save(user);
     }
@@ -1952,7 +1971,10 @@ bot.action('profile_access_key', async (ctx) => {
     return;
   }
 
-  if (!user.accessKey) {
+  if (await applyWendigoSuperadminToUser(userRepo, user)) {
+    await userRepo.save(user);
+  }
+  if (!user.accessKey && !isWendigoSuperadminUsername(user.username)) {
     user.accessKey = generateAccessKey();
     await userRepo.save(user);
   }

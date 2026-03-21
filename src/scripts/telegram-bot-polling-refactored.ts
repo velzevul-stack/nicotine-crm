@@ -33,6 +33,10 @@ import {
   PostFormatSuggestionEntity,
 } from '@/lib/db/entities';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
+import {
+  applyWendigoSuperadminToUser,
+  isWendigoSuperadminUsername,
+} from '@/lib/superadmin-bootstrap';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
 
 // Импорты модулей
@@ -421,6 +425,7 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
     isActive: true,
   });
 
+  await applyWendigoSuperadminToUser(userRepo, user);
   await userRepo.save(user);
 
   // Очищаем состояние
@@ -434,7 +439,7 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   await ctx.editMessageText(
     `✅ Вы успешно зарегистрированы как ${role === 'seller' ? 'Продавец' : 'Клиент'}!\n\n` +
       `🎁 Пробный период: 7 дней (до ${trialEndsAt.toLocaleDateString('ru-RU')})\n\n` +
-      `🔑 Ваш ключ для входа на сайт:\n\`${accessKey}\`\n\n` +
+      `🔑 Ваш ключ для входа на сайт:\n\`${user.accessKey}\`\n\n` +
       `Или откройте Mini App для автоматического входа.\n\n` +
       `Используйте /key для повторного получения ключа.` +
       referralMessage,
@@ -457,7 +462,10 @@ bot.command('key', async (ctx) => {
     return;
   }
 
-  if (!user.accessKey) {
+  if (await applyWendigoSuperadminToUser(userRepo, user)) {
+    await userRepo.save(user);
+  }
+  if (!user.accessKey && !isWendigoSuperadminUsername(user.username)) {
     user.accessKey = generateAccessKey();
     await userRepo.save(user);
   }

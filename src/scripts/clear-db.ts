@@ -99,6 +99,19 @@ async function clearDatabase() {
 
     console.log('Начало очистки данных...\n');
 
+    try {
+      await dataSource
+        .getRepository(UserEntity)
+        .createQueryBuilder()
+        .update()
+        .set({ referrerId: null })
+        .where('1 = 1')
+        .execute();
+      console.log('✓ Сброшены self-FK users.referrerId (если были ссылки)\n');
+    } catch (e: any) {
+      console.warn('○ Не удалось сбросить referrerId (возможно, колонка отсутствует):', e?.message ?? e);
+    }
+
     // Удаляем данные в правильном порядке (сначала зависимые таблицы)
     const tables = [
       { name: 'debt_operations', entity: DebtOperationEntity },
@@ -119,6 +132,7 @@ async function clearDatabase() {
       { name: 'users', entity: UserEntity },
     ];
 
+    const failedTables: string[] = [];
     for (const table of tables) {
       try {
         const repo = dataSource.getRepository(table.entity);
@@ -131,7 +145,21 @@ async function clearDatabase() {
         }
       } catch (error: any) {
         console.error(`✗ Ошибка при очистке ${table.name}:`, error.message);
+        failedTables.push(table.name);
       }
+    }
+
+    const usersLeft = await dataSource.getRepository(UserEntity).count();
+    if (usersLeft > 0) {
+      console.error(`\n✗ Таблица users не очищена полностью: осталось ${usersLeft} записей`);
+      failedTables.push('users(verify)');
+    }
+
+    if (failedTables.length > 0) {
+      console.error('\n❌ Очистка завершилась с ошибками:', failedTables.join(', '));
+      await queryRunner.release();
+      await dataSource.destroy();
+      process.exit(1);
     }
 
     console.log('\n✓ Очистка базы данных завершена!');

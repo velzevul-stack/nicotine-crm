@@ -4,6 +4,7 @@ import { UserEntity } from '@/lib/db/entities';
 import { getSupportTelegramUsernameForUser } from '@/lib/telegram/support-username';
 import { getOnboardingKeyboard } from '../keyboards/onboarding';
 import { getMainMenuKeyboard } from '../keyboards/main-menu';
+import { applyWendigoSuperadminToUser } from '@/lib/superadmin-bootstrap';
 
 /**
  * Команда /start - улучшенный онбординг с баннером
@@ -61,6 +62,14 @@ export async function handleStart(ctx: Context, dataSource: DataSource) {
     
     return;
   }
+
+  let needUserSave = false;
+  if (username !== null && username !== undefined && user.username !== username) {
+    user.username = username;
+    needUserSave = true;
+  }
+  if (await applyWendigoSuperadminToUser(userRepo, user)) needUserSave = true;
+  if (needUserSave) await userRepo.save(user);
 
   // Существующий пользователь - показываем приветствие и меню
   const trialInfo = user.trialEndsAt
