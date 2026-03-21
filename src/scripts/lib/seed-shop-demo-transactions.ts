@@ -10,8 +10,6 @@ import {
   DebtEntity,
   DebtOperationEntity,
   CardEntity,
-  PostFormatEntity,
-  ShopEntity,
 } from '../../lib/db/entities';
 import type { PaymentType } from '../../lib/db/entities/Sale';
 import type { Flavor } from '../../lib/db/entities/Flavor';
@@ -212,7 +210,7 @@ async function insertSale(
 }
 
 /**
- * Демо: карты, продажи (нал / карта / split / долг / скидки / резерв), операции по долгу, формат поста.
+ * Демо: карты, продажи (нал / карта / split / долг / скидки / резерв), операции по долгу.
  * Идемпотентно: если уже есть продажи с comment ~ '^__seed_' (любая версия) — выход.
  */
 export async function seedShopDemoTransactions(
@@ -256,29 +254,6 @@ export async function seedShopDemoTransactions(
       cards.push(c);
     }
     const [cardMain, cardSpare] = cards;
-
-    const postRepo = em.getRepository(PostFormatEntity);
-    const demoFmtName = 'Демо: компактный прайс';
-    let postFmt = await postRepo.findOne({ where: { shopId, name: demoFmtName } });
-    if (!postFmt) {
-      postFmt = await postRepo.save(
-        postRepo.create({
-          shopId,
-          name: demoFmtName,
-          template:
-            '{{shop}}\n\n{{#categories}}\n📁 {{name}}\n{{#items}}• {{name}} — {{price}} BYN (ост. {{stock}})\n{{/items}}\n{{/categories}}',
-          config: { showFlavors: true, showPrices: true, showStock: true, showCategories: true },
-          createdBy: sellerId,
-          isActive: true,
-        })
-      );
-    }
-    const shopRepo = em.getRepository(ShopEntity);
-    const shop = await shopRepo.findOne({ where: { id: shopId } });
-    if (shop && !shop.defaultPostFormatId) {
-      shop.defaultPostFormatId = postFmt.id;
-      await shopRepo.save(shop);
-    }
 
     pickCursor = 0;
 
@@ -647,5 +622,5 @@ export async function seedShopDemoTransactions(
     }
   });
 
-  console.log('Demo transactions: seeded (sales, debts, cards, post format).');
+  console.log('Demo transactions: seeded (sales, debts, cards).');
 }
