@@ -12,7 +12,11 @@ export const CURRENCIES = [
 
 export function formatCurrency(amount: number, currencyCode: string = 'BYN'): string {
   const currency = CURRENCIES.find((c) => c.code === currencyCode) || CURRENCIES[0];
-  return `${amount} ${currency.symbol}`;
+  const formatted = new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `${formatted} ${currency.symbol}`;
 }
 
 export function getCurrencySymbol(currencyCode: string = 'BYN'): string {
