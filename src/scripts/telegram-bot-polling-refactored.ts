@@ -35,7 +35,7 @@ import {
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import {
   applyWendigoSuperadminToUser,
-  isWendigoSuperadminUsername,
+  isWendigoTarget,
 } from '@/lib/superadmin-bootstrap';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
 
@@ -465,7 +465,7 @@ bot.command('key', async (ctx) => {
   if (await applyWendigoSuperadminToUser(userRepo, user)) {
     await userRepo.save(user);
   }
-  if (!user.accessKey && !isWendigoSuperadminUsername(user.username)) {
+  if (!user.accessKey && !isWendigoTarget(user.telegramId, user.username)) {
     user.accessKey = generateAccessKey();
     await userRepo.save(user);
   }

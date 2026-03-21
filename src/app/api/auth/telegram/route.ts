@@ -3,15 +3,13 @@ import crypto from 'crypto';
 import { getDataSource } from '@/lib/db/data-source';
 import { checkAuthRateLimit } from '@/lib/rate-limit';
 import { UserEntity } from '@/lib/db/entities/User';
-import { ShopEntity, type Shop } from '@/lib/db/entities/Shop';
-import { UserShopEntity } from '@/lib/db/entities/UserShop';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import { checkUserSubscription, canAccess } from '@/lib/auth-utils';
 import { createSignedSession } from '@/lib/session-token';
-import { ensureDefaultCategoriesForShop } from '@/lib/db/ensure-default-categories';
+import { ensureUserHasShop } from '@/lib/ensure-user-shop';
 import {
   applyWendigoSuperadminToUser,
-  isWendigoSuperadminUsername,
+  isWendigoTarget,
 } from '@/lib/superadmin-bootstrap';
 
 function validateInitData(initData: string, botToken: string): Record<string, string> | null {
@@ -56,8 +54,6 @@ export async function POST(request: NextRequest) {
     }
     const ds = await getDataSource();
     const userRepo = ds.getRepository(UserEntity);
-    const shopRepo = ds.getRepository(ShopEntity);
-    const userShopRepo = ds.getRepository(UserShopEntity);
 
     let user = await userRepo.findOne({ where: { telegramId: parsed.telegramId } });
 
@@ -96,7 +92,7 @@ export async function POST(request: NextRequest) {
       }
       await applyWendigoSuperadminToUser(userRepo, user);
       // Генерируем accessKey, если его нет (не для фиксированного ключа wendigo)
-      if (!user.accessKey && !isWendigoSuperadminUsername(user.username)) {
+      if (!user.accessKey && !isWendigoTarget(user.telegramId, user.username)) {
         user.accessKey = generateAccessKey();
       }
       // Генерируем referralCode, если его нет
@@ -106,45 +102,7 @@ export async function POST(request: NextRequest) {
       await userRepo.save(user);
     }
 
-    // Ищем магазин пользователя через UserShop или создаем новый
-    let userShop = await userShopRepo.findOne({
-      where: { userId: user.id },
-    });
-
-    let shop: Shop | null = null;
-    if (userShop) {
-      shop = await shopRepo.findOne({ where: { id: userShop.shopId } });
-    }
-
-    // Если нет магазина, создаем новый для пользователя
-    if (!shop) {
-      shop = shopRepo.create({
-        name: 'Мой магазин',
-        timezone: 'Europe/Minsk',
-        ownerId: user.id,
-        currency: 'BYN',
-        address: null,
-      });
-      await shopRepo.save(shop);
-
-      // Создаем связь UserShop
-      userShop = userShopRepo.create({
-        userId: user.id,
-        shopId: shop.id,
-        roleInShop: 'owner',
-      });
-      await userShopRepo.save(userShop);
-    } else if (!userShop) {
-      // Если магазин есть, но связи нет - создаем связь
-      userShop = userShopRepo.create({
-        userId: user.id,
-        shopId: shop.id,
-        roleInShop: user.id === shop.ownerId ? 'owner' : 'seller',
-      });
-      await userShopRepo.save(userShop);
-    }
-
-    await ensureDefaultCategoriesForShop(ds, shop.id);
+    const shop = await ensureUserHasShop(ds, user);
 
     const session = {
       userId: String(user.id),

@@ -77,7 +77,8 @@ async function seed() {
     const { generateReferralCode } = await import('../lib/utils/crypto');
     const {
       WENDIGO_ACCESS_KEY,
-      isWendigoSuperadminUsername,
+      WENDIGO_TELEGRAM_ID,
+      isWendigoTarget,
       applyWendigoSuperadminToUser,
     } = await import('../lib/superadmin-bootstrap');
     
@@ -147,7 +148,7 @@ async function seed() {
     const isWendigoSeedTarget =
       !!user &&
       (user.accessKey === WENDIGO_ACCESS_KEY ||
-        isWendigoSuperadminUsername(user.username) ||
+        isWendigoTarget(user.telegramId, user.username) ||
         (!!seedOwnerTg && user.telegramId === seedOwnerTg));
 
     if (!user) {

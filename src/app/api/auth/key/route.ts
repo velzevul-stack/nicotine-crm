@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
-import { UserEntity, ShopEntity, UserShopEntity, type User } from '@/lib/db/entities';
+import { UserEntity, type User } from '@/lib/db/entities';
 import { checkAuthRateLimit } from '@/lib/rate-limit';
 import { createSignedSession } from '@/lib/session-token';
-import { ensureDefaultCategoriesForShop } from '@/lib/db/ensure-default-categories';
+import { ensureUserHasShop } from '@/lib/ensure-user-shop';
 // import { checkUserSubscription, canAccess } from '@/lib/auth-utils'; // Используем упрощенную проверку
 import { z } from 'zod';
 
@@ -59,8 +59,6 @@ export async function POST(request: NextRequest) {
       )
     ]);
     const userRepo = ds.getRepository(UserEntity);
-    const shopRepo = ds.getRepository(ShopEntity);
-    const userShopRepo = ds.getRepository(UserShopEntity);
 
     // Обрезаем пробелы с начала и конца ключа
     const trimmedKey = parsed.data.accessKey.trim();
@@ -123,40 +121,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Authentication failed' }, { status: 401 });
     }
 
-    // Find shop for user through UserShop relation
-    let userShop = await userShopRepo.findOne({
-      where: { userId: user.id },
-    });
-
-    // If no shop relation, try to find owned shop or create default
-    if (!userShop) {
-      let shop = await shopRepo.findOne({ where: { ownerId: user.id } });
-      
-      if (!shop) {
-        // Create a new shop for the user
-        shop = shopRepo.create({
-          name: 'Мой магазин',
-          timezone: 'Europe/Minsk',
-          ownerId: user.id,
-          currency: 'BYN',
-          address: null,
-        });
-        await shopRepo.save(shop);
-      }
-      
-      // Create UserShop relation
-      userShop = await userShopRepo.save(userShopRepo.create({
-        userId: user.id,
-        shopId: shop.id,
-        roleInShop: user.id === shop.ownerId ? 'owner' : 'seller'
-      }));
-    }
-
-    await ensureDefaultCategoriesForShop(ds, userShop.shopId);
+    const shop = await ensureUserHasShop(ds, user);
 
     const session = {
       userId: String(user.id),
-      shopId: String(userShop.shopId),
+      shopId: String(shop.id),
       telegramId: String(user.telegramId ?? ''),
     };
     

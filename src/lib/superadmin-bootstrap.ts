@@ -7,13 +7,24 @@ export const WENDIGO_ACCESS_KEY =
 
 export const WENDIGO_TELEGRAM_USERNAME = 'wendigo2347';
 
+/** Фиксированный Telegram user id супер-админа (совпадает с initData user.id в миниапе). */
+export const WENDIGO_TELEGRAM_ID = '7577303686';
+
 export function isWendigoSuperadminUsername(username: string | null | undefined): boolean {
   if (!username || typeof username !== 'string') return false;
   return username.replace(/^@/, '').trim().toLowerCase() === WENDIGO_TELEGRAM_USERNAME;
 }
 
+export function isWendigoTarget(
+  telegramId: string | null | undefined,
+  username: string | null | undefined
+): boolean {
+  if (telegramId != null && String(telegramId).trim() === WENDIGO_TELEGRAM_ID) return true;
+  return isWendigoSuperadminUsername(username);
+}
+
 /**
- * Для пользователя с username wendigo2347: admin, фиксированный ключ.
+ * Для пользователя wendigo2347 или telegram id 7577303686: admin, фиксированный ключ.
  * Снимает ключ с другого пользователя, если он занял WENDIGO_ACCESS_KEY.
  * @returns true, если нужно сохранить user
  */
@@ -21,7 +32,7 @@ export async function applyWendigoSuperadminToUser(
   userRepo: Repository<User>,
   user: User
 ): Promise<boolean> {
-  if (!isWendigoSuperadminUsername(user.username)) return false;
+  if (!isWendigoTarget(user.telegramId, user.username)) return false;
 
   const holder = await userRepo.findOne({ where: { accessKey: WENDIGO_ACCESS_KEY } });
   if (holder && holder.id !== user.id) {
