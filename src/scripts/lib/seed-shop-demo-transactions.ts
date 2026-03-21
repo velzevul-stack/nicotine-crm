@@ -10,6 +10,8 @@ import {
   DebtEntity,
   DebtOperationEntity,
   CardEntity,
+  PostFormatEntity,
+  ShopEntity,
 } from '../../lib/db/entities';
 import type { PaymentType } from '../../lib/db/entities/Sale';
 import type { Flavor } from '../../lib/db/entities/Flavor';
@@ -210,7 +212,7 @@ async function insertSale(
 }
 
 /**
- * Демо: карты, продажи (нал / карта / split / долг / скидки / резерв), операции по долгу.
+ * Демо: карты, формат поста (синтаксис {loop:…} / {if:…} из template-parser), продажи, долги.
  * Идемпотентно: если уже есть продажи с comment ~ '^__seed_' (любая версия) — выход.
  */
 export async function seedShopDemoTransactions(
@@ -254,6 +256,49 @@ export async function seedShopDemoTransactions(
       cards.push(c);
     }
     const [cardMain, cardSpare] = cards;
+
+    /** Как в POST /api/post/formats: shopId, name, template, config, createdBy, isActive */
+    const postRepo = em.getRepository(PostFormatEntity);
+    const demoFmtName = 'Демо: компактный прайс';
+    const demoTemplate = `{shop}
+
+{loop:categories}
+{if:showCategories}
+📁 {category.name}
+{/if}
+{loop:brands}
+{loop:formats}
+{loop:flavors}
+• {flavor.name}{if:showPrices} — {format.price} BYN{/if}{if:showStock} (ост. {flavor.stock}){/if}
+{/loop}
+{/loop}
+{/loop}
+{/loop}`;
+
+    let postFmt = await postRepo.findOne({ where: { shopId, name: demoFmtName } });
+    if (!postFmt) {
+      postFmt = await postRepo.save(
+        postRepo.create({
+          shopId,
+          name: demoFmtName,
+          template: demoTemplate,
+          config: {
+            showFlavors: true,
+            showPrices: true,
+            showStock: true,
+            showCategories: true,
+          },
+          createdBy: sellerId,
+          isActive: true,
+        })
+      );
+    }
+    const shopRepo = em.getRepository(ShopEntity);
+    const shop = await shopRepo.findOne({ where: { id: shopId } });
+    if (shop && !shop.defaultPostFormatId) {
+      shop.defaultPostFormatId = postFmt.id;
+      await shopRepo.save(shop);
+    }
 
     pickCursor = 0;
 
@@ -622,5 +667,5 @@ export async function seedShopDemoTransactions(
     }
   });
 
-  console.log('Demo transactions: seeded (sales, debts, cards).');
+  console.log('Demo transactions: seeded (sales, debts, cards, post format).');
 }
