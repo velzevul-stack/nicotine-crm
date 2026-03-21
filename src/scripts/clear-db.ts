@@ -12,15 +12,9 @@ import 'reflect-metadata';
 import fs from 'fs';
 import path from 'path';
 
-console.log('⚠️  ВНИМАНИЕ: Этот скрипт удалит ВСЕ данные из базы данных!');
-console.log('Нажмите Ctrl+C для отмены или подождите 5 секунд...\n');
-
-// Даем время на отмену
-await new Promise(resolve => setTimeout(resolve, 5000));
-
-// Manual .env loading
-const envPath = path.resolve(process.cwd(), '.env');
-if (fs.existsSync(envPath)) {
+function loadEnvFromFile(): void {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (!fs.existsSync(envPath)) return;
   const envConfig = fs.readFileSync(envPath, 'utf-8');
   envConfig.split('\n').forEach((line) => {
     const [key, ...valueParts] = line.split('=');
@@ -35,6 +29,13 @@ if (fs.existsSync(envPath)) {
 }
 
 async function clearDatabase() {
+  console.log('⚠️  ВНИМАНИЕ: Этот скрипт удалит ВСЕ данные из базы данных!');
+  console.log('Нажмите Ctrl+C для отмены или подождите 5 секунд...\n');
+
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+
+  loadEnvFromFile();
+
   try {
     console.log('Импорт сущностей...');
     const {
@@ -148,4 +149,7 @@ async function clearDatabase() {
   }
 }
 
-clearDatabase();
+clearDatabase().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
