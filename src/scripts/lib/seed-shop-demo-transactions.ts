@@ -1,5 +1,6 @@
 import type { DataSource, EntityManager } from 'typeorm';
 import { In } from 'typeorm';
+import { format } from 'date-fns';
 import {
   SaleEntity,
   SaleItemEntity,
@@ -18,8 +19,8 @@ import type { StockItem } from '../../lib/db/entities/StockItem';
 import type { ProductFormat } from '../../lib/db/entities/ProductFormat';
 import type { Card } from '../../lib/db/entities/Card';
 
-/** Префикс в `sales.comment` для демо-продаж (идемпотентность). Не использовать `LIKE` без экранирования — `_` в SQL wildcard. */
-export const SEED_SALE_COMMENT_PREFIX = '__seed_v1:';
+/** Префикс в `sales.comment` для демо-продаж. Идемпотентность: любая версия `__seed_%`. */
+export const SEED_SALE_COMMENT_PREFIX = '__seed_v2:';
 
 type FlavorRow = {
   flavor: Flavor;
@@ -27,11 +28,29 @@ type FlavorRow = {
   format: ProductFormat;
 };
 
-function daysAgo(days: number): Date {
+function daysAgo(days: number, hour = 12, minute = 0): Date {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  d.setHours(12, 0, 0, 0);
+  d.setHours(hour, minute, 0, 0);
   return d;
+}
+
+function dayKeyFromDate(d: Date): string {
+  return format(d, 'yyyy-MM-dd');
+}
+
+/** Прибыль дня в отчётах: finalAmount − себестоимость строк (резервы не учитываются). */
+function addSeedDayProfit(
+  map: Map<string, number>,
+  when: Date,
+  isReservation: boolean,
+  finalAmount: number,
+  lines: { row: FlavorRow; qty: number }[]
+) {
+  if (isReservation) return;
+  const cost = lines.reduce((s, l) => s + (l.row.stock.costPrice ?? 0) * l.qty, 0);
+  const key = dayKeyFromDate(when);
+  map.set(key, (map.get(key) ?? 0) + (finalAmount - cost));
 }
 
 async function loadFlavorRows(em: EntityManager, shopId: string): Promise<FlavorRow[]> {
@@ -102,7 +121,6 @@ async function insertSale(
     discountType: 'absolute' | 'percent';
     finalAmount: number;
     totalAmount: number;
-    totalCost: number | null;
     customerName: string | null;
     isReservation: boolean;
     reservationExpiry: Date | null;
@@ -114,6 +132,11 @@ async function insertSale(
   const itemRepo = em.getRepository(SaleItemEntity);
   const stockRepo = em.getRepository(StockItemEntity);
 
+  const totalCost = ctx.lines.reduce(
+    (s, l) => s + (l.row.stock.costPrice ?? 0) * l.qty,
+    0
+  );
+
   const sale = saleRepo.create({
     shopId: ctx.shopId,
     sellerId: ctx.sellerId,
@@ -121,7 +144,7 @@ async function insertSale(
     saleDate: ctx.when,
     paymentType: ctx.paymentType,
     totalAmount: ctx.totalAmount,
-    totalCost: ctx.totalCost,
+    totalCost,
     discountValue: ctx.discountAmount,
     discountType: ctx.discountType,
     finalAmount: ctx.finalAmount,
@@ -190,19 +213,18 @@ async function insertSale(
 
 /**
  * Демо: карты, продажи (нал / карта / split / долг / скидки / резерв), операции по долгу, формат поста.
- * Идемпотентно: если уже есть продажи с comment, начинающимся с SEED_SALE_COMMENT_PREFIX — выход.
+ * Идемпотентно: если уже есть продажи с comment ~ '^__seed_' (любая версия) — выход.
  */
 export async function seedShopDemoTransactions(
   ds: DataSource,
   { shopId, sellerId }: { shopId: string; sellerId: string }
 ): Promise<void> {
   const saleRepo = ds.getRepository(SaleEntity);
-  const prefix = SEED_SALE_COMMENT_PREFIX;
   const existing = await saleRepo
     .createQueryBuilder('s')
     .where('s.shopId = :shopId', { shopId })
     .andWhere('s.comment IS NOT NULL')
-    .andWhere('LEFT(s.comment, :len) = :pref', { len: prefix.length, pref: prefix })
+    .andWhere("s.comment ~ '^__seed_'")
     .getCount();
 
   if (existing > 0) {
@@ -212,7 +234,10 @@ export async function seedShopDemoTransactions(
 
   await ds.transaction(async (em) => {
     const rows = await loadFlavorRows(em, shopId);
-    await ensureMinAvailable(em, rows, 8);
+    await ensureMinAvailable(em, rows, 280);
+
+    const dailyProfit = new Map<string, number>();
+    let volumeSeq = 0;
 
     const cardRepo = em.getRepository(CardEntity);
     const cardNames = ['Основная карта', 'Запасная'];
@@ -257,17 +282,74 @@ export async function seedShopDemoTransactions(
 
     pickCursor = 0;
 
+    const DAYS_HISTORY = 45;
+
+    // 0) Сегодня — несколько продаж (нал / карта / split)
+    {
+      const slots = [
+        { h: 9, m: 12, mode: 0 as const },
+        { h: 12, m: 45, mode: 1 as const },
+        { h: 16, m: 30, mode: 2 as const },
+      ];
+      for (const slot of slots) {
+        const when = daysAgo(0, slot.h, slot.m);
+        const a = pickRow(rows, 2);
+        const t = a.format.unitPrice * 2;
+        const lines = [{ row: a, qty: 2, lineTotal: t }];
+        let paymentType: PaymentType = 'cash';
+        let cashAmount: number | null = t;
+        let cardAmount: number | null = 0;
+        let cardId: string | null = null;
+        if (slot.mode === 1) {
+          paymentType = 'card';
+          cashAmount = 0;
+          cardAmount = t;
+          cardId = cardMain.id;
+        } else if (slot.mode === 2) {
+          paymentType = 'split';
+          cashAmount = Math.floor(t / 2);
+          cardAmount = t - (cashAmount ?? 0);
+          cardId = cardSpare.id;
+        }
+        await insertSale(em, {
+          shopId,
+          sellerId,
+          when,
+          commentSuffix: `today-${slot.h}-${slot.m}`,
+          paymentType,
+          cashAmount,
+          cardAmount,
+          cardId,
+          discountAmount: 0,
+          discountType: 'absolute',
+          finalAmount: t,
+          totalAmount: t,
+          customerName: null,
+          isReservation: false,
+          reservationExpiry: null,
+          reservationCustomerName: null,
+          lines,
+        });
+        addSeedDayProfit(dailyProfit, when, false, t, lines);
+      }
+    }
+
     // 1) Наличные
     {
+      const when = daysAgo(2, 11, 20);
       const a = pickRow(rows, 1);
       const b = pickRow(rows, 1);
       const t1 = a.format.unitPrice;
       const t2 = b.format.unitPrice;
       const total = t1 + t2;
+      const lines = [
+        { row: a, qty: 1, lineTotal: t1 },
+        { row: b, qty: 1, lineTotal: t2 },
+      ];
       await insertSale(em, {
         shopId,
         sellerId,
-        when: daysAgo(2),
+        when,
         commentSuffix: 'наличные',
         paymentType: 'cash',
         cashAmount: total,
@@ -277,26 +359,25 @@ export async function seedShopDemoTransactions(
         discountType: 'absolute',
         finalAmount: total,
         totalAmount: total,
-        totalCost: null,
         customerName: null,
         isReservation: false,
         reservationExpiry: null,
         reservationCustomerName: null,
-        lines: [
-          { row: a, qty: 1, lineTotal: t1 },
-          { row: b, qty: 1, lineTotal: t2 },
-        ],
+        lines,
       });
+      addSeedDayProfit(dailyProfit, when, false, total, lines);
     }
 
     // 2) Карта
     {
+      const when = daysAgo(3, 14, 5);
       const a = pickRow(rows, 2);
       const t = a.format.unitPrice * 2;
+      const lines = [{ row: a, qty: 2, lineTotal: t }];
       await insertSale(em, {
         shopId,
         sellerId,
-        when: daysAgo(3),
+        when,
         commentSuffix: 'карта',
         paymentType: 'card',
         cashAmount: 0,
@@ -306,17 +387,18 @@ export async function seedShopDemoTransactions(
         discountType: 'absolute',
         finalAmount: t,
         totalAmount: t,
-        totalCost: null,
         customerName: null,
         isReservation: false,
         reservationExpiry: null,
         reservationCustomerName: null,
-        lines: [{ row: a, qty: 2, lineTotal: t }],
+        lines,
       });
+      addSeedDayProfit(dailyProfit, when, false, t, lines);
     }
 
     // 3) Split
     {
+      const when = daysAgo(4, 10, 40);
       const a = pickRow(rows, 1);
       const b = pickRow(rows, 1);
       const t1 = a.format.unitPrice;
@@ -324,10 +406,14 @@ export async function seedShopDemoTransactions(
       const total = t1 + t2;
       const cash = Math.floor(total / 2);
       const card = total - cash;
+      const lines = [
+        { row: a, qty: 1, lineTotal: t1 },
+        { row: b, qty: 1, lineTotal: t2 },
+      ];
       await insertSale(em, {
         shopId,
         sellerId,
-        when: daysAgo(4),
+        when,
         commentSuffix: 'split',
         paymentType: 'split',
         cashAmount: cash,
@@ -337,32 +423,34 @@ export async function seedShopDemoTransactions(
         discountType: 'absolute',
         finalAmount: total,
         totalAmount: total,
-        totalCost: null,
         customerName: null,
         isReservation: false,
         reservationExpiry: null,
         reservationCustomerName: null,
-        lines: [
-          { row: a, qty: 1, lineTotal: t1 },
-          { row: b, qty: 1, lineTotal: t2 },
-        ],
+        lines,
       });
+      addSeedDayProfit(dailyProfit, when, false, total, lines);
     }
 
     // 4) Долг + операции
     const debtCustomer = 'Иван Петров';
     let debtSaleFinal = 0;
     {
+      const when = daysAgo(5, 15, 0);
       const a = pickRow(rows, 1);
       const b = pickRow(rows, 1);
       const t1 = a.format.unitPrice;
       const t2 = b.format.unitPrice;
       const total = t1 + t2;
       debtSaleFinal = total;
+      const lines = [
+        { row: a, qty: 1, lineTotal: t1 },
+        { row: b, qty: 1, lineTotal: t2 },
+      ];
       await insertSale(em, {
         shopId,
         sellerId,
-        when: daysAgo(5),
+        when,
         commentSuffix: 'долг',
         paymentType: 'debt',
         cashAmount: 0,
@@ -372,16 +460,13 @@ export async function seedShopDemoTransactions(
         discountType: 'absolute',
         finalAmount: total,
         totalAmount: total,
-        totalCost: null,
         customerName: debtCustomer,
         isReservation: false,
         reservationExpiry: null,
         reservationCustomerName: null,
-        lines: [
-          { row: a, qty: 1, lineTotal: t1 },
-          { row: b, qty: 1, lineTotal: t2 },
-        ],
+        lines,
       });
+      addSeedDayProfit(dailyProfit, when, false, total, lines);
     }
 
     const debtRepo = em.getRepository(DebtEntity);
@@ -397,7 +482,7 @@ export async function seedShopDemoTransactions(
         debtId: debtRow.id,
         saleId: null,
         amount: -payPart,
-        datetime: daysAgo(4),
+        datetime: daysAgo(4, 18, 0),
         comment: 'Погашение долга (демо)',
       });
       await opRepo.save(payOp);
@@ -405,14 +490,16 @@ export async function seedShopDemoTransactions(
 
     // 5) Скидка суммой
     {
+      const when = daysAgo(6, 13, 10);
       const a = pickRow(rows, 2);
       const total = a.format.unitPrice * 2;
       const disc = Math.min(10, total);
       const finalAmt = total - disc;
+      const lines = [{ row: a, qty: 2, lineTotal: total }];
       await insertSale(em, {
         shopId,
         sellerId,
-        when: daysAgo(6),
+        when,
         commentSuffix: 'скидка BYN',
         paymentType: 'cash',
         cashAmount: finalAmt,
@@ -422,25 +509,27 @@ export async function seedShopDemoTransactions(
         discountType: 'absolute',
         finalAmount: finalAmt,
         totalAmount: total,
-        totalCost: null,
         customerName: null,
         isReservation: false,
         reservationExpiry: null,
         reservationCustomerName: null,
-        lines: [{ row: a, qty: 2, lineTotal: total }],
+        lines,
       });
+      addSeedDayProfit(dailyProfit, when, false, finalAmt, lines);
     }
 
     // 6) Скидка %
     {
+      const when = daysAgo(7, 16, 25);
       const a = pickRow(rows, 1);
       const total = a.format.unitPrice;
       const disc = Math.round((total * 20) / 100 * 100) / 100;
       const finalAmt = Math.round((total - disc) * 100) / 100;
+      const lines = [{ row: a, qty: 1, lineTotal: total }];
       await insertSale(em, {
         shopId,
         sellerId,
-        when: daysAgo(7),
+        when,
         commentSuffix: 'скидка %',
         paymentType: 'cash',
         cashAmount: finalAmt,
@@ -450,17 +539,18 @@ export async function seedShopDemoTransactions(
         discountType: 'percent',
         finalAmount: finalAmt,
         totalAmount: total,
-        totalCost: null,
         customerName: null,
         isReservation: false,
         reservationExpiry: null,
         reservationCustomerName: null,
-        lines: [{ row: a, qty: 1, lineTotal: total }],
+        lines,
       });
+      addSeedDayProfit(dailyProfit, when, false, finalAmt, lines);
     }
 
-    // 7) Резерв
+    // 7) Резерв (в отчёте не даёт выручку/прибыль за день)
     {
+      const when = daysAgo(1, 17, 50);
       const a = pickRow(rows, 1);
       const b = pickRow(rows, 1);
       const t1 = a.format.unitPrice;
@@ -469,10 +559,14 @@ export async function seedShopDemoTransactions(
       const expiry = new Date();
       expiry.setDate(expiry.getDate() + 3);
       expiry.setHours(23, 59, 0, 0);
+      const lines = [
+        { row: a, qty: 1, lineTotal: t1 },
+        { row: b, qty: 1, lineTotal: t2 },
+      ];
       await insertSale(em, {
         shopId,
         sellerId,
-        when: daysAgo(1),
+        when,
         commentSuffix: 'резерв',
         paymentType: 'cash',
         cashAmount: total,
@@ -482,16 +576,74 @@ export async function seedShopDemoTransactions(
         discountType: 'absolute',
         finalAmount: total,
         totalAmount: total,
-        totalCost: null,
         customerName: null,
         isReservation: true,
         reservationExpiry: expiry,
         reservationCustomerName: 'Мария (резерв)',
-        lines: [
-          { row: a, qty: 1, lineTotal: t1 },
-          { row: b, qty: 1, lineTotal: t2 },
-        ],
+        lines,
       });
+      addSeedDayProfit(dailyProfit, when, true, total, lines);
+    }
+
+    // 8) Массовые продажи за последние дни: целевая прибыль по дню 300–500 BYN (как в /api/reports)
+    for (let dayIdx = 0; dayIdx < DAYS_HISTORY; dayIdx++) {
+      const target = 300 + ((dayIdx * 73 + dayIdx * dayIdx * 5) % 201);
+      const anchor = daysAgo(dayIdx, 12, 0);
+      const key = dayKeyFromDate(anchor);
+      let guard = 0;
+      while ((dailyProfit.get(key) ?? 0) < target && guard < 120) {
+        guard++;
+        volumeSeq++;
+        const hour = 8 + ((dayIdx + volumeSeq) % 12);
+        const minute = (volumeSeq * 11 + dayIdx) % 60;
+        const when = daysAgo(dayIdx, hour, minute);
+        const nLines = 1 + ((dayIdx + volumeSeq) % 3);
+        const saleLines: { row: FlavorRow; qty: number; lineTotal: number }[] = [];
+        let total = 0;
+        for (let L = 0; L < nLines; L++) {
+          const qty = 1 + ((dayIdx + volumeSeq + L * 3) % 5);
+          const row = pickRow(rows, qty);
+          const lt = row.format.unitPrice * qty;
+          total += lt;
+          saleLines.push({ row, qty, lineTotal: lt });
+        }
+        const mode = (dayIdx + volumeSeq) % 3;
+        let paymentType: PaymentType = 'cash';
+        let cashAmount: number | null = total;
+        let cardAmount: number | null = 0;
+        let cardId: string | null = null;
+        if (mode === 1) {
+          paymentType = 'card';
+          cashAmount = 0;
+          cardAmount = total;
+          cardId = cardMain.id;
+        } else if (mode === 2) {
+          paymentType = 'split';
+          cashAmount = Math.floor(total / 2);
+          cardAmount = total - (cashAmount ?? 0);
+          cardId = cardSpare.id;
+        }
+        await insertSale(em, {
+          shopId,
+          sellerId,
+          when,
+          commentSuffix: `vol-${key}-${volumeSeq}`,
+          paymentType,
+          cashAmount,
+          cardAmount,
+          cardId,
+          discountAmount: 0,
+          discountType: 'absolute',
+          finalAmount: total,
+          totalAmount: total,
+          customerName: null,
+          isReservation: false,
+          reservationExpiry: null,
+          reservationCustomerName: null,
+          lines: saleLines,
+        });
+        addSeedDayProfit(dailyProfit, when, false, total, saleLines);
+      }
     }
   });
 

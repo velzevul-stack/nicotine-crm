@@ -321,28 +321,44 @@ async function seed() {
     }
     const [pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9, pf10, pf11] = formats;
 
+    const costForFormat = (unitPrice: number) =>
+      Math.max(1, Math.round(Number(unitPrice) * 0.54));
+
     const flavorNames: [string, string][] = [
       ['pf1', 'ЛИМОНАД КИВИ КАКТУС'],
       ['pf1', 'МАНДАРИН СЛАДКОЕ ЯБЛОКО'],
       ['pf1', 'КЛУБНИКА БАНАН'],
       ['pf1', 'АНАНАС МАНГО'],
+      ['pf1', 'ГРЕЙПФРУТ ЛИЧИ'],
+      ['pf1', 'ЧЕРНИКА МАЛИНА'],
       ['pf2', 'ВИНОГРАД МЯТА'],
       ['pf2', 'ПЕРСИК ЛАЙМ'],
+      ['pf2', 'ЯГОДЫ ЛЁД'],
+      ['pf2', 'КОЛА ВИШНЯ'],
       ['pf3', 'ДЫНЯ АРБУЗ'],
       ['pf3', 'КОКОС ВАНИЛЬ'],
       ['pf3', 'МАЛИНА МОХИТО'],
+      ['pf3', 'ЛИЧИ МЯТА'],
       ['pf4', 'ХОЛОДНЫЙ МАНГО'],
       ['pf4', 'ЛЕДЯНОЙ АРБУЗ'],
+      ['pf4', 'ГУАВА ЛАЙМ'],
       ['pf5', 'Чёрный'],
       ['pf5', 'Серебро'],
+      ['pf5', 'Розовый'],
       ['pf6', 'Стандарт'],
+      ['pf6', 'Mesh 0.6'],
       ['pf7', 'Красный'],
+      ['pf7', 'Синий'],
       ['pf8', 'Коричневый'],
+      ['pf8', 'Белый'],
       ['pf9', 'Экстрим'],
+      ['pf9', 'Cold Dry'],
       ['pf10', 'Мята'],
       ['pf10', 'Клубника'],
+      ['pf10', 'Виноград'],
       ['pf11', 'Манго'],
       ['pf11', 'Арбуз'],
+      ['pf11', 'Кола'],
     ];
     
     const pfMap: Record<string, any> = {
@@ -358,7 +374,10 @@ async function seed() {
       pf10: pf10,
       pf11: pf11,
     };
-    const quantities = [5, 3, 0, 7, 2, 4, 6, 1, 0, 8, 3, 2, 1, 12, 10, 8, 15, 6, 4, 9, 7];
+    const baseQty = [
+      18, 14, 12, 22, 16, 20, 10, 8, 24, 15, 20, 11, 9, 19, 14, 17, 13, 6, 5, 8, 40, 35, 28, 32, 24, 22, 38, 36, 16, 14, 12, 20, 18, 25,
+    ];
+    const quantities = baseQty.map((q, i) => q + ((i * 7) % 11));
 
     for (let i = 0; i < flavorNames.length; i++) {
       const [pfKey, name] = flavorNames[i];
@@ -375,6 +394,7 @@ async function seed() {
           name,
         })
       );
+      const costPrice = costForFormat(format.unitPrice);
       let stock = await stockRepo.findOne({
         where: { shopId: shop.id, flavorId: flavor.id },
       });
@@ -382,12 +402,13 @@ async function seed() {
         stock = stockRepo.create({
           shopId: shop.id,
           flavorId: flavor.id,
-          quantity: quantities[i] ?? 0,
-          costPrice: 5, // Default cost price
+          quantity: quantities[i] ?? 24,
+          costPrice,
         });
         await stockRepo.save(stock);
       } else {
-        stock.quantity = quantities[i] ?? 0;
+        stock.quantity = quantities[i] ?? stock.quantity;
+        stock.costPrice = costPrice;
         await stockRepo.save(stock);
       }
     }
