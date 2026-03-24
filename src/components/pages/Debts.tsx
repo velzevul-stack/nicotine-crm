@@ -7,6 +7,7 @@ import { ChevronRight, DollarSign, ArrowDownRight, ArrowUpRight } from 'lucide-r
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
+import { parsePositiveMoneyInput } from '@/lib/parse-money-input';
 import { useToast } from '@/hooks/use-toast';
 import { useHintSeen } from '@/hooks/use-hint-seen';
 import {
@@ -66,12 +67,13 @@ export function Debts() {
     },
   });
 
-  const totalDebt = debts.reduce((s, d) => s + d.totalDebt, 0);
+  const totalDebt = debts.reduce((s, d) => s + Number(d.totalDebt ?? 0), 0);
   const selected = debts.find((d) => d.id === selectedDebt);
+  const parsedPaymentAmount = parsePositiveMoneyInput(paymentAmount);
 
   const handlePayment = () => {
-    const amount = parseFloat(paymentAmount);
-    if (!showPayment || !amount || amount <= 0) return;
+    const amount = parsePositiveMoneyInput(paymentAmount);
+    if (!showPayment || amount === null) return;
     paymentMutation.mutate({
       debtId: showPayment.id,
       amount,
@@ -225,13 +227,23 @@ export function Debts() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-2">
-            <input
-              type="number"
-              placeholder={`Сумма (${getCurrencySymbol(shopData?.currency)})`}
-              value={paymentAmount}
-              onChange={(e) => setPaymentAmount(e.target.value)}
-              className="w-full h-10 px-4 rounded-xl bg-secondary border border-border text-sm font-mono-nums"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder={`Сумма (${getCurrencySymbol(shopData?.currency)})`}
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                className="flex-1 h-10 px-4 rounded-xl bg-secondary border border-border text-sm font-mono-nums"
+              />
+              <button
+                type="button"
+                onClick={() => setPaymentAmount(String(showPayment?.totalDebt ?? 0))}
+                className="h-10 px-3 rounded-xl bg-success/15 text-success text-xs font-medium whitespace-nowrap"
+              >
+                Полностью
+              </button>
+            </div>
             <input
               type="text"
               placeholder="Комментарий (необязательно)"
@@ -241,11 +253,7 @@ export function Debts() {
             />
             <button
               onClick={handlePayment}
-              disabled={
-                !paymentAmount ||
-                parseFloat(paymentAmount) <= 0 ||
-                paymentMutation.isPending
-              }
+              disabled={parsedPaymentAmount === null || paymentMutation.isPending}
               className="w-full h-11 gradient-primary rounded-xl font-semibold text-primary-foreground glow-primary disabled:opacity-50"
             >
               Записать оплату

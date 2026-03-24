@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
 import { DebtEntity, DebtOperationEntity } from '@/lib/db/entities';
-import { In } from 'typeorm';
+import { In, MoreThan } from 'typeorm';
 import { z } from 'zod';
 
 const paymentSchema = z.object({
@@ -20,8 +20,9 @@ export async function GET() {
   const debtRepo = ds.getRepository(DebtEntity);
   const opRepo = ds.getRepository(DebtOperationEntity);
   
+  // Только ненулевой остаток — после полного погашения запись не показываем в списке
   const debts = await debtRepo.find({
-    where: { shopId: session.shopId },
+    where: { shopId: session.shopId, totalDebt: MoreThan(0) },
     order: { updatedAt: 'DESC' },
   });
 

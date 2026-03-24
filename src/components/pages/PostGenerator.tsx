@@ -44,7 +44,7 @@ export function PostGenerator() {
   const [showSuggestModal, setShowSuggestModal] = useState(false);
   const [suggestionText, setSuggestionText] = useState('');
 
-  const { data: inventoryData } = useQuery({
+  const { data: inventoryData, dataUpdatedAt: inventoryDataUpdatedAt } = useQuery({
     queryKey: ['inventory'],
     queryFn: () =>
       api<{
@@ -224,7 +224,14 @@ export function PostGenerator() {
   });
 
   const { data: postData } = useQuery({
-    queryKey: ['post', filteredFormats.map((pf: any) => pf.id), filters, selectedPostFormatId],
+    // При обновлении склада меняется dataUpdatedAt у ['inventory'], иначе кэш /api/post/generate не сбрасывался
+    queryKey: [
+      'post',
+      filteredFormats.map((pf: any) => pf.id),
+      filters,
+      selectedPostFormatId,
+      inventoryDataUpdatedAt,
+    ],
     queryFn: () =>
       api<{ text: string }>('/api/post/generate', {
         method: 'POST',

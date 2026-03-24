@@ -7,7 +7,9 @@ import { SaleFormModal } from '@/components/sales/SaleFormModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
+import { parsePositiveMoneyInput } from '@/lib/parse-money-input';
 import { useHintSeen } from '@/hooks/use-hint-seen';
+import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +27,7 @@ interface DebtWithOps {
 }
 
 export function DebtsTab() {
+  const { toast } = useToast();
   const [showHint] = useHintSeen('debts');
   const [showDebtModal, setShowDebtModal] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState<string | null>(null);
@@ -52,13 +55,21 @@ export function DebtsTab() {
       setPaymentAmount('');
       setPaymentComment('');
     },
+    onError: (err: Error) => {
+      toast({
+        title: 'Ошибка',
+        description: err.message || 'Не удалось записать оплату',
+        variant: 'destructive',
+      });
+    },
   });
 
-  const totalDebt = debts.reduce((s, d) => s + d.totalDebt, 0);
+  const totalDebt = debts.reduce((s, d) => s + Number(d.totalDebt ?? 0), 0);
+  const parsedPaymentAmount = parsePositiveMoneyInput(paymentAmount);
 
   const handlePayment = () => {
-    const amount = parseFloat(paymentAmount);
-    if (!showPayment || !amount || amount <= 0) return;
+    const amount = parsePositiveMoneyInput(paymentAmount);
+    if (!showPayment || amount === null) return;
     paymentMutation.mutate({
       debtId: showPayment.id,
       amount,
@@ -227,7 +238,8 @@ export function DebtsTab() {
           <div className="space-y-3 mt-2">
             <div className="flex gap-2">
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 placeholder={`Сумма (${getCurrencySymbol(shopData?.currency)})`}
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
@@ -249,11 +261,7 @@ export function DebtsTab() {
             />
             <button
               onClick={handlePayment}
-              disabled={
-                !paymentAmount ||
-                parseFloat(paymentAmount) <= 0 ||
-                paymentMutation.isPending
-              }
+              disabled={parsedPaymentAmount === null || paymentMutation.isPending}
               className="w-full h-11 rounded-[14px] bg-[#BFE7E5] text-[#111111] font-semibold disabled:opacity-50 transition-colors"
             >
               Записать оплату
