@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { ScanModal } from './ScanModal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ReceiveModalProps {
@@ -624,6 +625,8 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
 
   const [createNewCategory, setCreateNewCategory] = useState(false);
   const [isNewBrand, setIsNewBrand] = useState(true);
+  const [showBarcodeScan, setShowBarcodeScan] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   // Проверка на похожие бренды
   const similarBrands = useMemo(() => {
@@ -972,6 +975,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
   };
 
   return (
+    <>
     <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0 flex flex-col">
         <DialogHeader className="p-4 pb-2">
@@ -981,11 +985,25 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
         <form onSubmit={handleSubmit} className="space-y-4 p-4 pt-0 flex-1 overflow-y-auto">
           <div className="space-y-2">
             <Label>Штрихкод (необязательно)</Label>
-            <Input 
-              value={formData.barcode} 
-              onChange={e => setFormData({...formData, barcode: e.target.value})} 
-              placeholder="Оставьте пустым, если нет штрихкода"
-            />
+            <div className="flex gap-2">
+              <Input
+                ref={barcodeInputRef}
+                className="flex-1"
+                value={formData.barcode}
+                onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                placeholder="Оставьте пустым, если нет штрихкода"
+                autoComplete="off"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setShowBarcodeScan(true)}
+                aria-label="Сканировать штрихкод"
+              >
+                <ScanLine size={18} />
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -1020,18 +1038,34 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 required
               />
             ) : (
-              <select 
-                className="w-full h-10 rounded-md border border-border bg-secondary px-3 text-sm"
-                value={formData.categoryId}
-                onChange={e => {
-                  setFormData({...formData, categoryId: e.target.value, brandId: '', brandName: '', brandEmoji: '', strengthLabel: '', ohmValue: '', flavorName: '', customValues: {}});
+              <Select
+                value={formData.categoryId || undefined}
+                onValueChange={(categoryId) => {
+                  setFormData({
+                    ...formData,
+                    categoryId,
+                    brandId: '',
+                    brandName: '',
+                    brandEmoji: '',
+                    strengthLabel: '',
+                    ohmValue: '',
+                    flavorName: '',
+                    customValues: {},
+                  });
                   setIsNewBrand(true);
                 }}
-                required
               >
-                <option value="">Выберите...</option>
-                {categories.map((c: any) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
-              </select>
+                <SelectTrigger className="h-10 w-full rounded-md border border-border bg-secondary px-3 text-sm">
+                  <SelectValue placeholder="Выберите категорию" />
+                </SelectTrigger>
+                <SelectContent className="z-[100]">
+                  {categories.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.emoji} {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
 
@@ -1079,29 +1113,34 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                   )}
                 </>
               ) : (
-                <select 
-                  className="w-full h-10 rounded-md border border-border bg-secondary px-3 text-sm"
-                  value={formData.brandId}
-                  onChange={e => {
-                    const selectedBrand = brands.find((b: any) => b.id === e.target.value);
-                    const selectedFormat = productFormats.find((f: any) => f.brandId === e.target.value);
-                  setFormData({
-                    ...formData, 
-                    brandId: e.target.value,
-                    brandName: '',
-                    brandEmoji: '',
-                    ohmValue: '', // Сбрасываем омы при смене бренда
-                    unitPrice: selectedFormat ? selectedFormat.unitPrice : formData.unitPrice,
-                    customValues: {}
-                  });
+                <Select
+                  value={formData.brandId || undefined}
+                  onValueChange={(brandId) => {
+                    const selectedFormat = productFormats.find((f: any) => f.brandId === brandId);
+                    setFormData({
+                      ...formData,
+                      brandId,
+                      brandName: '',
+                      brandEmoji: '',
+                      ohmValue: '',
+                      unitPrice: selectedFormat ? selectedFormat.unitPrice : formData.unitPrice,
+                      customValues: {},
+                    });
                   }}
-                  required
                 >
-                  <option value="">Выберите бренд...</option>
-                  {brands
-                    .filter((b: any) => b.categoryId === formData.categoryId)
-                    .map((b: any) => <option key={b.id} value={b.id}>{b.emojiPrefix} {b.name}</option>)}
-                </select>
+                  <SelectTrigger className="h-10 w-full rounded-md border border-border bg-secondary px-3 text-sm">
+                    <SelectValue placeholder="Выберите бренд" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[100]">
+                    {brands
+                      .filter((b: any) => b.categoryId === formData.categoryId)
+                      .map((b: any) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.emojiPrefix} {b.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               )}
             </div>
           )}
@@ -1129,36 +1168,41 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                     {field.required && <span className="text-destructive ml-1">*</span>}
                   </Label>
                   {field.type === 'select' ? (
-                    <select
-                      className="w-full h-10 rounded-md border border-border bg-secondary px-3 text-sm"
+                    <Select
                       value={
-                        field.target === 'flavor_name' ? formData.flavorName :
-                        field.target === 'strength_label' ? formData.strengthLabel :
-                        formData.customValues?.[field.name] || ''
+                        (field.target === 'flavor_name'
+                          ? formData.flavorName
+                          : field.target === 'strength_label'
+                            ? formData.strengthLabel
+                            : formData.customValues?.[field.name]) || undefined
                       }
-                      onChange={e => {
-                        const val = e.target.value;
+                      onValueChange={(val) => {
                         if (field.target === 'flavor_name') {
-                          setFormData({...formData, flavorName: val});
+                          setFormData({ ...formData, flavorName: val });
                         } else if (field.target === 'strength_label') {
-                          setFormData({...formData, strengthLabel: val});
+                          setFormData({ ...formData, strengthLabel: val });
                         } else {
                           setFormData({
                             ...formData,
                             customValues: {
                               ...formData.customValues,
-                              [field.name]: val
-                            }
+                              [field.name]: val,
+                            },
                           });
                         }
                       }}
-                      required={field.required}
                     >
-                      <option value="">Выберите...</option>
-                      {field.options?.map((opt: string) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="h-10 w-full rounded-md border border-border bg-secondary px-3 text-sm">
+                        <SelectValue placeholder="Выберите..." />
+                      </SelectTrigger>
+                      <SelectContent className="z-[100]">
+                        {field.options?.map((opt: string) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <Input
                       type={field.type === 'number' ? 'number' : 'text'}
@@ -1501,6 +1545,21 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
         </form>
       </DialogContent>
     </Dialog>
+    <ScanModal
+      open={showBarcodeScan}
+      onOpenChange={(isOpen) => {
+        setShowBarcodeScan(isOpen);
+        if (!isOpen) {
+          setTimeout(() => barcodeInputRef.current?.focus(), 100);
+        }
+      }}
+      onScan={(code) => {
+        setFormData((prev) => ({ ...prev, barcode: code }));
+        setShowBarcodeScan(false);
+        setTimeout(() => barcodeInputRef.current?.focus(), 100);
+      }}
+    />
+    </>
   );
 }
 
