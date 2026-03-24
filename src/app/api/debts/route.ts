@@ -69,37 +69,48 @@ export async function POST(request: NextRequest) {
   }
 
   const ds = await getDataSource();
-  const debtRepo = ds.getRepository(DebtEntity);
-  const opRepo = ds.getRepository(DebtOperationEntity);
 
-  const debt = await debtRepo.findOne({
-    where: { id: parsed.data.debtId, shopId: session.shopId },
+  return ds.transaction(async (em) => {
+    const debtRepo = em.getRepository(DebtEntity);
+    const opRepo = em.getRepository(DebtOperationEntity);
+
+    const debt = await debtRepo.findOne({
+      where: { id: parsed.data.debtId, shopId: session.shopId },
+    });
+    if (!debt) {
+      return NextResponse.json({ message: 'Debt not found' }, { status: 404 });
+    }
+
+    const paymentAmount = Math.abs(parsed.data.amount);
+
+    if (paymentAmount > debt.totalDebt) {
+      return NextResponse.json(
+        { message: `Сумма оплаты (${paymentAmount}) не может быть больше остатка долга (${debt.totalDebt})` },
+        { status: 400 }
+      );
+    }
+
+    const newTotal = Math.max(0, debt.totalDebt - paymentAmount);
+    const fullyRepaid = newTotal < 1e-6;
+
+    if (fullyRepaid) {
+      await opRepo.delete({ debtId: debt.id });
+      await debtRepo.delete({ id: debt.id });
+      return NextResponse.json({ removed: true });
+    }
+
+    debt.totalDebt = newTotal;
+    await debtRepo.save(debt);
+
+    const op = opRepo.create({
+      debtId: debt.id,
+      saleId: null,
+      amount: -paymentAmount,
+      datetime: new Date(),
+      comment: parsed.data.comment ?? 'Погашение долга',
+    });
+    await opRepo.save(op);
+
+    return NextResponse.json({ debt, operation: op });
   });
-  if (!debt)
-    return NextResponse.json({ message: 'Debt not found' }, { status: 404 });
-
-  const paymentAmount = Math.abs(parsed.data.amount);
-  
-  // Проверяем, что сумма оплаты не превышает остаток долга
-  if (paymentAmount > debt.totalDebt) {
-    return NextResponse.json(
-      { message: `Сумма оплаты (${paymentAmount}) не может быть больше остатка долга (${debt.totalDebt})` },
-      { status: 400 }
-    );
-  }
-
-  const amount = -paymentAmount;
-  debt.totalDebt = Math.max(0, debt.totalDebt + amount);
-  await debtRepo.save(debt);
-
-  const op = opRepo.create({
-    debtId: debt.id,
-    saleId: null,
-    amount,
-    datetime: new Date(),
-    comment: parsed.data.comment ?? 'Погашение долга',
-  });
-  await opRepo.save(op);
-
-  return NextResponse.json({ debt, operation: op });
 }
