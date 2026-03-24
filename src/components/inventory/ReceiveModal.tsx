@@ -62,6 +62,28 @@ function areSimilar(str1: string, str2: string): boolean {
   return differences <= 2;
 }
 
+/** Омы и доп. числовое поле: скобки в вводе, запятая, «.8», суффиксы Ω — нормализуем (часто с Android). */
+function normalizeDecimalNumericInput(raw: string): { ok: true; normalized: string } | { ok: false } {
+  let s = raw.trim();
+  if (!s) return { ok: false };
+  while (s.startsWith('(') && s.endsWith(')')) {
+    s = s.slice(1, -1).trim();
+  }
+  s = s.replace(/[ΩΩ]|ohm|\bом\b/gi, '').trim();
+  const commaCount = (s.match(/,/g) || []).length;
+  if (commaCount === 1 && !s.includes('.')) {
+    s = s.replace(',', '.');
+  } else {
+    s = s.replace(/,/g, '');
+  }
+  if (s.startsWith('.')) s = `0${s}`;
+  if (s.endsWith('.')) s = s.slice(0, -1);
+  if (!/^\d+(\.\d+)?$/.test(s)) return { ok: false };
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0) return { ok: false };
+  return { ok: true, normalized: s };
+}
+
 export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: ReceiveModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -714,6 +736,9 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    let legacyConsumableOhmNormalized: string | undefined;
+    let legacyConsumableResistanceNormalized: string | undefined;
     
     if (isNewBrand && similarBrands.length > 0) {
       return; // Не отправляем если есть похожие бренды
@@ -770,7 +795,6 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     } else {
         // Legacy Validation
         if (isConsumableCategory) {
-          // Для расходников: нужны омы
           if (!formData.ohmValue?.trim()) {
             toast({
               title: 'Ошибка',
@@ -779,15 +803,28 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             });
             return;
           }
-          // Проверка формата омов (число или число.число)
-          const ohmMatch = formData.ohmValue.trim().match(/^(\d+\.?\d*)$/);
-          if (!ohmMatch) {
+          const ohmParsed = normalizeDecimalNumericInput(formData.ohmValue);
+          if (!ohmParsed.ok) {
             toast({
               title: 'Ошибка',
-              description: 'Омы должны быть числом (например: 0.4, 1, 0.6)',
+              description: 'Номинал омов — только число, например 0.8 или 0,8 (запятая тоже подойдёт).',
               variant: 'destructive',
             });
             return;
+          }
+          legacyConsumableOhmNormalized = ohmParsed.normalized;
+
+          if (formData.strengthLabel?.trim()) {
+            const qtyParsed = normalizeDecimalNumericInput(formData.strengthLabel);
+            if (!qtyParsed.ok) {
+              toast({
+                title: 'Ошибка',
+                description: 'Во втором поле — только число, например 1 или 0,8.',
+                variant: 'destructive',
+              });
+              return;
+            }
+            legacyConsumableResistanceNormalized = qtyParsed.normalized;
           }
         } else if (isDeviceCategory || isDisposableCategory) {
           // Для устройств и одноразок: нужен цвет/вкус
@@ -875,8 +912,11 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             ? '' 
             : formData.flavorName;
         
-        payload.ohmValue = isConsumableCategory ? formData.ohmValue.trim() : undefined;
-        payload.resistanceValue = isConsumableCategory && formData.strengthLabel ? formData.strengthLabel.trim() : undefined;
+        payload.ohmValue = isConsumableCategory ? legacyConsumableOhmNormalized ?? formData.ohmValue.trim() : undefined;
+        payload.resistanceValue =
+          isConsumableCategory && legacyConsumableResistanceNormalized !== undefined
+            ? legacyConsumableResistanceNormalized
+            : undefined;
         payload.strengthLabel = formData.strengthLabel;
     }
 
@@ -902,8 +942,8 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
           }
       } else {
           // Legacy Format Name
-          if (isConsumableCategory && formData.ohmValue) {
-            payload.formatName = `${formData.brandName} ${formData.ohmValue}`;
+          if (isConsumableCategory && payload.ohmValue) {
+            payload.formatName = `${formData.brandName} ${payload.ohmValue}`;
           } else {
             payload.formatName = formData.brandName;
           }
@@ -932,8 +972,8 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
 
       } else {
           // Legacy Format Selection
-          if (isConsumableCategory && formData.ohmValue) {
-            const formatName = `${selectedBrand?.name || ''} ${formData.ohmValue}`;
+          if (isConsumableCategory && payload.ohmValue) {
+            const formatName = `${selectedBrand?.name || ''} ${payload.ohmValue}`;
             const selectedFormat = productFormats.find((f: any) => 
               f.brandId === formData.brandId && f.name === formatName
             );
@@ -1272,30 +1312,30 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
               {/* Омы для расходников - показываем всегда когда выбран бренд */}
               {isConsumableCategory && (formData.brandName || formData.brandId) && (
                 <div className="space-y-2">
-                  <Label>Омы</Label>
+                  <Label>Омы (номинал)</Label>
                   <Input
                     value={formData.ohmValue}
                     onChange={e => setFormData({...formData, ohmValue: e.target.value})}
-                    placeholder="0.4, 1, 0.6..."
+                    placeholder="Например 0.8 или 0,8"
                     required
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Введите значение омов (например: 0.4, 1, 0.6)
+                    Указано на койле или упаковке
                   </p>
                 </div>
               )}
 
-              {/* Количество для расходников (необязательно) */}
+              {/* Доп. подпись для расходников (необязательно) — уходит в название позиции */}
               {isConsumableCategory && formData.ohmValue && (
                 <div className="space-y-2">
-                  <Label>Количество (необязательно)</Label>
+                  <Label>Дополнение к названию (необязательно)</Label>
                   <Input
                     value={formData.strengthLabel}
                     onChange={e => setFormData({...formData, strengthLabel: e.target.value})}
-                    placeholder="1, 0.7..."
+                    placeholder="Например 5 — если нужно количество в упаковке"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Укажите количество для отображения в скобках (например: 1)
+                    Только число. Будет показано рядом с омами в списке товаров, если заполнить
                   </p>
                 </div>
               )}
