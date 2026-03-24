@@ -19,7 +19,8 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(), payment=()',
+            // camera=() блокирует getUserMedia даже после «Разрешить» в Chrome/Android
+            value: 'camera=(self), microphone=(), geolocation=(), payment=()',
           },
           {
             key: 'Strict-Transport-Security',
