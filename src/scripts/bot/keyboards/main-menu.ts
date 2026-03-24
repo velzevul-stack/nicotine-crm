@@ -1,6 +1,7 @@
 import { Keyboard } from 'telegraf/types';
 import { TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT } from '@/lib/telegram/support-username';
 import { TELEGRAM_INFO_CHANNEL_REPLY_BUTTON } from '@/lib/telegram/info-channel';
+import { getTelegramMiniAppLoginUrl, getTelegramMiniAppRootUrl } from '@/lib/telegram/mini-app-urls';
 
 /**
  * Главное меню (Reply Keyboard) - компактное, 2-3 ряда
@@ -8,11 +9,12 @@ import { TELEGRAM_INFO_CHANNEL_REPLY_BUTTON } from '@/lib/telegram/info-channel'
  */
 export function getMainMenuKeyboard(
   userRole?: 'seller' | 'client' | 'admin',
-  supportTelegramUsername?: string | null
+  supportTelegramUsername?: string | null,
+  accessKey?: string | null
 ): Keyboard {
-  const keyboard: any[][] = [
-    [{ text: '🌐 Открыть приложение', web_app: { url: process.env.TELEGRAM_MINI_APP_URL || 'https://127.0.0.1:8443' } }],
-  ];
+  const appUrl =
+    accessKey?.trim() ? getTelegramMiniAppLoginUrl(accessKey.trim()) : getTelegramMiniAppRootUrl();
+  const keyboard: any[][] = [[{ text: '🌐 Открыть приложение', web_app: { url: appUrl } }]];
 
   // Для продавцов показываем кнопку "Пост"
   if (userRole === 'seller' || !userRole) {

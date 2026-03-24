@@ -26,6 +26,7 @@ import { sendTelegramDocument } from '@/lib/telegram/send-document';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { getTelegramMiniAppLoginUrl, getTelegramMiniAppRootUrl } from '@/lib/telegram/mini-app-urls';
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 if (!botToken) {
@@ -66,16 +67,17 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-// Функция для получения URL Mini App
+// Функция для получения URL Mini App (корень, без ключа)
 function getMiniAppUrl(): string {
-  return process.env.TELEGRAM_MINI_APP_URL || 'https://127.0.0.1:8443';
+  return getTelegramMiniAppRootUrl();
 }
 
 // Функция для получения главного меню (Reply Keyboard)
-function getMainMenu(supportTelegramUsername?: string | null) {
+function getMainMenu(supportTelegramUsername?: string | null, accessKey?: string | null) {
   const supportUser = supportTelegramUsername?.replace('@', '').trim();
+  const appUrl = accessKey?.trim() ? getTelegramMiniAppLoginUrl(accessKey.trim()) : getMiniAppUrl();
   const keyboard: any[][] = [
-    [{ text: '🌐 Открыть приложение', web_app: { url: getMiniAppUrl() } }],
+    [{ text: '🌐 Открыть приложение', web_app: { url: appUrl } }],
     [{ text: '📝 Пост' }],
     [
       { text: '🔑 Мой ключ' },
@@ -103,9 +105,9 @@ function getMainMenu(supportTelegramUsername?: string | null) {
   };
 }
 
-async function getMainMenuForUser(ds: DataSource, user: { id: string }) {
+async function getMainMenuForUser(ds: DataSource, user: { id: string; accessKey?: string | null }) {
   const support = await getSupportTelegramUsernameForUser(ds, user);
-  return getMainMenu(support);
+  return getMainMenu(support, user.accessKey);
 }
 
 // Состояние выбора роли (в памяти, для MVP достаточно)
@@ -222,10 +224,13 @@ bot.command('start', async (ctx) => {
         ? '\n⚠️ Подписка истекла'
         : '';
 
+  const openAppUrl = user.accessKey?.trim()
+    ? getTelegramMiniAppLoginUrl(user.accessKey.trim())
+    : getMiniAppUrl();
   const inlineKeyboard = {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🌐 Открыть приложение', web_app: { url: getMiniAppUrl() } }],
+        [{ text: '🌐 Открыть приложение', web_app: { url: openAppUrl } }],
         [{ text: '📢 Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }],
       ],
     },
@@ -408,10 +413,13 @@ bot.command('key', async (ctx) => {
     await userRepo.save(user);
   }
 
+  const keyLoginUrl = user.accessKey?.trim()
+    ? getTelegramMiniAppLoginUrl(user.accessKey.trim())
+    : getMiniAppUrl();
   const inlineKeyboard = {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🌐 Открыть приложение', web_app: { url: getMiniAppUrl() } }],
+        [{ text: '🌐 Открыть приложение', web_app: { url: keyLoginUrl } }],
       ],
     },
   };
@@ -1584,10 +1592,13 @@ bot.on('text', async (ctx) => {
       await userRepo.save(user);
     }
 
+    const keyLoginUrl = user.accessKey?.trim()
+      ? getTelegramMiniAppLoginUrl(user.accessKey.trim())
+      : getMiniAppUrl();
     const inlineKeyboard = {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🌐 Открыть приложение', web_app: { url: getMiniAppUrl() } }],
+          [{ text: '🌐 Открыть приложение', web_app: { url: keyLoginUrl } }],
         ],
       },
     };

@@ -98,6 +98,6 @@ export async function handleStart(ctx: Context, dataSource: DataSource) {
       trialInfo +
       subscriptionInfo +
       infoChannelMessageFooter(),
-    { reply_markup: getMainMenuKeyboard(user.role, supportUsername) }
+    { reply_markup: getMainMenuKeyboard(user.role, supportUsername, user.accessKey) }
   );
 }

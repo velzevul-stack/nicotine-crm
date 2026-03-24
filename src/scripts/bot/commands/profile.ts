@@ -247,6 +247,6 @@ export async function confirmRoleSwitch(
 
   // Обновляем главное меню с учетом новой роли
   await ctx.reply('📱 Главное меню обновлено:', {
-    reply_markup: getMainMenuKeyboard(newRole, supportUsername),
+    reply_markup: getMainMenuKeyboard(newRole, supportUsername, newUser.accessKey),
   });
 }

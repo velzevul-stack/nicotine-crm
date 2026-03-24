@@ -43,6 +43,7 @@ import {
   applyWendigoSuperadminToUser,
   isWendigoTarget,
 } from '@/lib/superadmin-bootstrap';
+import { getTelegramMiniAppLoginUrl, getTelegramMiniAppRootUrl } from '@/lib/telegram/mini-app-urls';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
 
 // Импорты модулей
@@ -351,10 +352,10 @@ async function showPostMenu(ctx: any, userId: number, userShopId: string) {
 
 async function mainMenuKeyboardForUser(
   ds: DataSource,
-  user: { id: string; role: 'seller' | 'client' | 'admin' }
+  user: { id: string; role: 'seller' | 'client' | 'admin'; accessKey?: string | null }
 ) {
   const support = await getSupportTelegramUsernameForUser(ds, user);
-  return getMainMenuKeyboard(user.role, support);
+  return getMainMenuKeyboard(user.role, support, user.accessKey);
 }
 
 // ==================== КОМАНДЫ ====================
@@ -476,10 +477,13 @@ bot.command('key', async (ctx) => {
     await userRepo.save(user);
   }
 
+  const keyLoginUrl = user.accessKey?.trim()
+    ? getTelegramMiniAppLoginUrl(user.accessKey.trim())
+    : getTelegramMiniAppRootUrl();
   const inlineKeyboard = {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🌐 Открыть приложение', web_app: { url: process.env.TELEGRAM_MINI_APP_URL || 'https://127.0.0.1:8443' } }],
+        [{ text: '🌐 Открыть приложение', web_app: { url: keyLoginUrl } }],
       ],
     },
   };
@@ -973,10 +977,13 @@ bot.on('text', async (ctx) => {
       await userRepo.save(user);
     }
 
+    const keyLoginUrl = user.accessKey?.trim()
+      ? getTelegramMiniAppLoginUrl(user.accessKey.trim())
+      : getTelegramMiniAppRootUrl();
     const inlineKeyboard = {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '🌐 Открыть приложение', web_app: { url: process.env.TELEGRAM_MINI_APP_URL || 'https://127.0.0.1:8443' } }],
+          [{ text: '🌐 Открыть приложение', web_app: { url: keyLoginUrl } }],
         ],
       },
     };

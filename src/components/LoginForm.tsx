@@ -1,10 +1,16 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getTelegramWebApp, waitForTelegramInitData } from '@/lib/telegram-mini-app';
+import {
+  takeAccessKeyFromUrlForLogin,
+  clearAccessKeyFromUrlSession,
+  tryMarkNavKeyAutoLoginAttempt,
+  resetNavKeyAutoLoginAttempt,
+} from '@/lib/access-key-from-url';
 import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
 import { cn } from '@/lib/utils';
 
@@ -12,10 +18,24 @@ const STORAGE_KEY = 'telegram_access_key';
 
 export function LoginForm() {
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
   const [accessKey, setAccessKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTelegramApp, setIsTelegramApp] = useState(false);
+  const keyFromBotUrlRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    const k = takeAccessKeyFromUrlForLogin();
+    keyFromBotUrlRef.current = k;
+    if (k) setAccessKey(k);
+  }, []);
+
+  useEffect(() => {
+    if (pathname !== '/') {
+      clearAccessKeyFromUrlSession();
+    }
+  }, [pathname]);
 
   const handleLoginSuccess = useCallback((subscriptionStatus?: { canAccess: boolean; hasActiveSubscription: boolean; isTrialExpired: boolean }) => {
     // Сначала логин выполнен, теперь проверяем подписку
@@ -37,6 +57,7 @@ export function LoginForm() {
 
     if (res.ok) {
       const data = await res.json();
+      clearAccessKeyFromUrlSession();
       // Сохраняем ключ в localStorage для Telegram mini-app
       if (isTgApp) {
         localStorage.setItem(STORAGE_KEY, key);
@@ -72,6 +93,26 @@ export function LoginForm() {
         const savedKey = localStorage.getItem(STORAGE_KEY);
         if (savedKey) setAccessKey(savedKey);
         return;
+      }
+
+      const navKey = keyFromBotUrlRef.current;
+      if (navKey?.trim() && tryMarkNavKeyAutoLoginAttempt(navKey.trim())) {
+        setLoading(true);
+        try {
+          await performLogin(navKey.trim(), true);
+          return;
+        } catch (e) {
+          console.error(e);
+          resetNavKeyAutoLoginAttempt();
+          setAccessKey(navKey.trim());
+          toast({
+            title: 'Ошибка входа',
+            description: e instanceof Error ? e.message : 'Проверьте ключ и попробуйте снова.',
+            variant: 'destructive',
+          });
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
       }
 
       if (initData) {
@@ -154,6 +195,7 @@ export function LoginForm() {
 
       if (res.ok) {
         const data = await res.json();
+        clearAccessKeyFromUrlSession();
         // Сохраняем ключ в localStorage для Telegram mini-app
         if (isTelegramApp) {
           localStorage.setItem(STORAGE_KEY, accessKey);
