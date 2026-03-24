@@ -67,6 +67,7 @@ export function Reports() {
   const [editSplitCash, setEditSplitCash] = useState('');
   const [editSplitCard, setEditSplitCard] = useState('');
   const [editDiscount, setEditDiscount] = useState('');
+  const [editDelivery, setEditDelivery] = useState('');
   const [editCustomer, setEditCustomer] = useState('');
   const [editComment, setEditComment] = useState('');
   const [editSaleDate, setEditSaleDate] = useState('');
@@ -301,6 +302,11 @@ export function Reports() {
     setEditSplitCash(pt === 'split' && sale.cashAmount != null ? String(sale.cashAmount) : '');
     setEditSplitCard(pt === 'split' && sale.cardAmount != null ? String(sale.cardAmount) : '');
     setEditDiscount(sale.discountValue > 0 ? String(sale.discountValue) : '');
+    setEditDelivery(
+      sale.deliveryAmount != null && Number(sale.deliveryAmount) > 0
+        ? String(sale.deliveryAmount)
+        : ''
+    );
     setEditCustomer(sale.customerName || '');
     setEditComment(sale.comment || '');
     setEditSaleDate(sale.saleDate ? format(new Date(sale.saleDate), "yyyy-MM-dd'T'HH:mm") : '');
@@ -377,7 +383,8 @@ export function Reports() {
     if (!editingSale || editItems.length === 0) return;
     const editSubtotal = editItems.reduce((s, i) => s + i.lineTotal, 0);
     const editDiscountAmount = editDiscount ? parseFloat(editDiscount) || 0 : 0;
-    const editTotal = Math.max(0, editSubtotal - editDiscountAmount);
+    const editDeliveryAmount = Math.max(0, editDelivery ? parseFloat(editDelivery) || 0 : 0);
+    const editTotal = Math.max(0, editSubtotal - editDiscountAmount + editDeliveryAmount);
 
     const payload: any = {
       items: editItems.map((i) => ({
@@ -391,6 +398,7 @@ export function Reports() {
       paymentType: editPayment,
       discountValue: editDiscountAmount,
       discountType: 'absolute',
+      deliveryAmount: editDeliveryAmount,
       customerName: editPayment === 'debt' ? editCustomer : null,
       comment: editComment || null,
     };
@@ -790,10 +798,15 @@ export function Reports() {
                                 </div>
                               ))}
                             </div>
-                            <div className="border-t border-border mt-2 pt-2 flex justify-between items-center">
+                            <div className="border-t border-border mt-2 pt-2 flex flex-wrap gap-x-3 gap-y-1 justify-between items-center">
                               {sale.discountValue > 0 && (
                                 <span className="text-xs text-destructive">
                                   −{formatCurrency(sale.discountValue, shopData?.currency)} скидка
+                                </span>
+                              )}
+                              {(sale.deliveryAmount ?? 0) > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  Доставка: {formatCurrency(sale.deliveryAmount, shopData?.currency)}
                                 </span>
                               )}
                               {sale.customerName && (
@@ -986,6 +999,19 @@ export function Reports() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  Доставка
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={editDelivery}
+                  onChange={(e) => setEditDelivery(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
                   Комментарий
                 </label>
                 <Textarea
@@ -995,7 +1021,18 @@ export function Reports() {
                   rows={2}
                 />
               </div>
-              <div className="border-t border-border pt-2">
+              <div className="border-t border-border pt-2 space-y-1">
+                {(editDelivery ? parseFloat(editDelivery) || 0 : 0) > 0 && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Доставка</span>
+                    <span className="font-mono-nums">
+                      {formatCurrency(
+                        Math.max(0, editDelivery ? parseFloat(editDelivery) || 0 : 0),
+                        shopData?.currency
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">Итого:</span>
                   <span className="font-mono-nums font-bold">
@@ -1003,7 +1040,8 @@ export function Reports() {
                       Math.max(
                         0,
                         editItems.reduce((s, i) => s + i.lineTotal, 0) -
-                          (editDiscount ? parseFloat(editDiscount) || 0 : 0)
+                          (editDiscount ? parseFloat(editDiscount) || 0 : 0) +
+                          Math.max(0, editDelivery ? parseFloat(editDelivery) || 0 : 0)
                       ),
                       shopData?.currency
                     )}

@@ -23,6 +23,7 @@ const updateSchema = z.object({
   saleDate: z.union([z.string().datetime(), z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)]).optional(),
   isReservation: z.boolean().optional(),
   reservationExpiry: z.union([z.string().datetime(), z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)]).nullable().optional(),
+  deliveryAmount: z.number().min(0).optional(),
   items: z
     .array(
       z.object({
@@ -154,11 +155,16 @@ export async function PATCH(
         discountType === 'percent'
           ? (totalAmount * discountValue) / 100
           : discountValue;
-      const finalAmount = Math.max(0, totalAmount - discountAmount);
+      const deliveryAmt =
+        parsed.data.deliveryAmount !== undefined
+          ? parsed.data.deliveryAmount
+          : (sale.deliveryAmount ?? 0);
+      const finalAmount = Math.max(0, totalAmount - discountAmount + deliveryAmt);
 
       sale.totalAmount = totalAmount;
       sale.discountValue = discountAmount;
       sale.discountType = discountType;
+      sale.deliveryAmount = deliveryAmt;
       sale.finalAmount = finalAmount;
 
       for (const it of parsed.data.items) {
@@ -188,6 +194,24 @@ export async function PATCH(
           stock.quantity -= it.quantity;
         }
         await em.getRepository(StockItemEntity).save(stock);
+      }
+    }
+
+    if (parsed.data.items === undefined && parsed.data.deliveryAmount !== undefined) {
+      sale.deliveryAmount = parsed.data.deliveryAmount;
+      sale.finalAmount = Math.max(
+        0,
+        sale.totalAmount - sale.discountValue + sale.deliveryAmount
+      );
+      if (sale.paymentType === 'cash') {
+        sale.cashAmount = sale.finalAmount;
+        sale.cardAmount = 0;
+      } else if (sale.paymentType === 'card') {
+        sale.cashAmount = 0;
+        sale.cardAmount = sale.finalAmount;
+      } else if (sale.paymentType === 'debt') {
+        sale.cashAmount = 0;
+        sale.cardAmount = sale.finalAmount;
       }
     }
 

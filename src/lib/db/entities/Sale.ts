@@ -14,6 +14,7 @@ export interface Sale {
   totalCost: number | null;
   discountValue: number;
   discountType: 'absolute' | 'percent';
+  deliveryAmount: number;
   finalAmount: number;
   cashAmount: number | null;
   cardAmount: number | null;
@@ -42,6 +43,7 @@ export const SaleEntity = new EntitySchema<Sale>({
     totalCost: { type: Number, nullable: true },
     discountValue: { type: Number, default: 0 },
     discountType: { type: String, default: 'absolute' },
+    deliveryAmount: { type: Number, default: 0 },
     finalAmount: { type: Number },
     cashAmount: { type: Number, nullable: true },
     cardAmount: { type: Number, nullable: true },

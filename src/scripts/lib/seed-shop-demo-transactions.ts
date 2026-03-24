@@ -119,6 +119,8 @@ async function insertSale(
     cardId: string | null;
     discountAmount: number;
     discountType: 'absolute' | 'percent';
+    /** Сумма доставки (клиент); по умолчанию 0 */
+    deliveryAmount?: number;
     finalAmount: number;
     totalAmount: number;
     customerName: string | null;
@@ -147,6 +149,7 @@ async function insertSale(
     totalCost,
     discountValue: ctx.discountAmount,
     discountType: ctx.discountType,
+    deliveryAmount: ctx.deliveryAmount ?? 0,
     finalAmount: ctx.finalAmount,
     cashAmount: ctx.cashAmount,
     cardAmount: ctx.cardAmount,

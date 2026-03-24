@@ -154,6 +154,7 @@ export function SaleFormModal({
   const [customerName, setCustomerName] = useState('');
   const [reservationExpiry, setReservationExpiry] = useState('');
   const [discount, setDiscount] = useState('');
+  const [delivery, setDelivery] = useState('');
   const [error, setError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -250,7 +251,8 @@ export function SaleFormModal({
 
   const subtotal = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
   const discountAmount = Math.min(parseFloat(discount) || 0, subtotal);
-  const total = Math.max(0, subtotal - discountAmount);
+  const deliveryAmount = Math.max(0, delivery ? parseFloat(delivery) || 0 : 0);
+  const total = Math.max(0, subtotal - discountAmount + deliveryAmount);
 
   const createSale = useMutation({
     mutationFn: (payload: CreateSalePayload) =>
@@ -277,6 +279,7 @@ export function SaleFormModal({
         setCustomerName('');
         setReservationExpiry('');
         setDiscount('');
+        setDelivery('');
         onOpenChange(false);
       }, 1500);
     },
@@ -324,6 +327,7 @@ export function SaleFormModal({
       paymentType: mode === 'debt' ? 'debt' : 'cash',
       discountValue: discountAmount,
       discountType: 'absolute',
+      deliveryAmount,
       comment: null,
       customerName: customerName.trim(),
       isReservation: mode === 'reserve',
@@ -343,6 +347,7 @@ export function SaleFormModal({
       setCustomerName('');
       setReservationExpiry('');
       setDiscount('');
+      setDelivery('');
       setError('');
     }
     onOpenChange(o);
@@ -511,9 +516,30 @@ export function SaleFormModal({
             />
           </div>
 
+          <div>
+            <label className="text-xs font-medium text-[#9CA3AF] mb-1 block">
+              Доставка ({getCurrencySymbol(shopData?.currency)})
+            </label>
+            <input
+              type="number"
+              placeholder="0"
+              min="0"
+              step="0.01"
+              value={delivery}
+              onChange={(e) => setDelivery(e.target.value)}
+              className="w-full py-2.5 px-3 rounded-xl bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm font-mono placeholder:text-[#9CA3AF] focus:outline-none focus:ring-1 focus:ring-[#BFE7E5]/50"
+            />
+          </div>
+
           {/* Total & Submit */}
           {cart.length > 0 && (
             <>
+              {deliveryAmount > 0 && (
+                <div className="flex justify-between text-xs text-[#9CA3AF] pt-1">
+                  <span>Доставка</span>
+                  <span className="font-mono-nums">{formatCurrency(deliveryAmount, shopData?.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center py-2 border-t border-white/10">
                 <span className="font-medium text-[#F5F5F7]">Итого</span>
                 <span className="font-mono-nums font-bold text-lg text-[#BFE7E5]">

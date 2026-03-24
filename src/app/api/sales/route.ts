@@ -54,6 +54,7 @@ const createSchema = z.object({
     z.string().nullable().optional()
   ),
   saleDate: z.string().datetime().optional(),
+  deliveryAmount: z.number().min(0).default(0),
   items: z.array(itemSchema).min(1),
 });
 
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { paymentType, cashAmount: reqCashAmount, cardAmount: reqCardAmount, cardId, discountValue, discountType, comment, customerName, isReservation, reservationExpiry, reservationCustomerName, saleDate, items } =
+  const { paymentType, cashAmount: reqCashAmount, cardAmount: reqCardAmount, cardId, discountValue, discountType, comment, customerName, isReservation, reservationExpiry, reservationCustomerName, saleDate, deliveryAmount, items } =
     parsed.data;
 
   const totalAmount = items.reduce((s, i) => s + i.lineTotal, 0);
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
     discountType === 'percent'
       ? Math.min((totalAmount * discountValue) / 100, totalAmount)
       : Math.min(discountValue, totalAmount);
-  const finalAmount = Math.max(0, totalAmount - discountAmount);
+  const finalAmount = Math.max(0, totalAmount - discountAmount + deliveryAmount);
 
   let cashAmount: number;
   let cardAmount: number;
@@ -168,6 +169,7 @@ export async function POST(request: NextRequest) {
       totalCost: null,
       discountValue: discountAmount,
       discountType,
+      deliveryAmount,
       finalAmount,
       cashAmount,
       cardAmount,

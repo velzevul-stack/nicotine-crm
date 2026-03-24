@@ -37,6 +37,7 @@ export interface Sale {
   id: string;
   datetime: string;
   finalAmount: number;
+  deliveryAmount?: number;
   paymentType: 'cash' | 'card' | 'debt';
   discountValue?: number;
   customerName?: string;

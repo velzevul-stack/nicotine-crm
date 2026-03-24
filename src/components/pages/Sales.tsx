@@ -30,6 +30,7 @@ export function Sales() {
   const [splitCard, setSplitCard] = useState('');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [discount, setDiscount] = useState('');
+  const [delivery, setDelivery] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [isReservation, setIsReservation] = useState(false);
   const [reservationExpiry, setReservationExpiry] = useState('');
@@ -104,6 +105,7 @@ export function Sales() {
         setShowSuccess(false);
         setCart([]);
         setDiscount('');
+        setDelivery('');
         setCustomerName('');
         setSplitCash('');
         setSplitCard('');
@@ -230,7 +232,8 @@ export function Sales() {
   const subtotal = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
   const discountInput = discount ? parseFloat(discount) || 0 : 0;
   const discountAmount = Math.min(discountInput, subtotal); // Скидка не может быть больше стоимости
-  const total = Math.max(0, subtotal - discountAmount);
+  const deliveryAmount = Math.max(0, delivery ? parseFloat(delivery) || 0 : 0);
+  const total = Math.max(0, subtotal - discountAmount + deliveryAmount);
 
   const handleSubmit = () => {
     if (cart.length === 0) {
@@ -274,6 +277,10 @@ export function Sales() {
       setError('Скидка не может быть отрицательной');
       return;
     }
+    if (delivery && (parseFloat(delivery) || 0) < 0) {
+      setError('Стоимость доставки не может быть отрицательной');
+      return;
+    }
     setError('');
     const items = cart.map((c) => ({
       flavorId: c.flavorId,
@@ -288,6 +295,7 @@ export function Sales() {
       paymentType: effectivePaymentType,
       discountValue: discountAmount,
       discountType: 'absolute' as const,
+      deliveryAmount,
       comment: null,
       customerName: effectivePaymentType === 'debt' && customerName?.trim() ? customerName.trim() : null,
       isReservation: Boolean(isReservation),
@@ -651,6 +659,28 @@ export function Sales() {
               />
             </div>
 
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                Доставка ({getCurrencySymbol(shopData?.currency)})
+              </p>
+              <input
+                type="number"
+                placeholder="0"
+                min="0"
+                step="0.01"
+                value={delivery}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const numVal = val === '' ? 0 : parseFloat(val) || 0;
+                  if (numVal >= 0) {
+                    setDelivery(val);
+                    setError('');
+                  }
+                }}
+                className="w-full py-3 px-4 rounded-[14px] bg-muted border border-border text-sm font-mono-nums placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+
             <div className="bg-card rounded-[20px] border border-border p-4">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-sm text-muted-foreground">Подытог</span>
@@ -663,6 +693,14 @@ export function Sales() {
                   <span className="text-sm text-muted-foreground">Скидка</span>
                   <span className="font-mono-nums text-sm text-destructive">
                     -{formatCurrency(discountAmount, shopData?.currency)}
+                  </span>
+                </div>
+              )}
+              {deliveryAmount > 0 && (
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm text-muted-foreground">Доставка</span>
+                  <span className="font-mono-nums text-sm">
+                    {formatCurrency(deliveryAmount, shopData?.currency)}
                   </span>
                 </div>
               )}

@@ -90,6 +90,7 @@ export interface Sale {
   totalCost: number | null;
   discountValue: number;
   discountType: string;
+  deliveryAmount: number;
   finalAmount: number;
   comment: string | null;
   customerName: string | null;
@@ -195,6 +196,7 @@ export interface CreateSalePayload {
   cardId?: string | null;
   discountValue: number;
   discountType: 'absolute' | 'percent';
+  deliveryAmount?: number;
   comment: string | null;
   customerName: string | null;
   isReservation: boolean;
