@@ -1,5 +1,6 @@
 import { Keyboard } from 'telegraf/types';
 import { TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT } from '@/lib/telegram/support-username';
+import { TELEGRAM_INFO_CHANNEL_REPLY_BUTTON } from '@/lib/telegram/info-channel';
 
 /**
  * Главное меню (Reply Keyboard) - компактное, 2-3 ряда
@@ -22,6 +23,8 @@ export function getMainMenuKeyboard(
   }
 
   keyboard.push([{ text: '💳 Подписка' }, { text: '🎁 Рефералы' }]);
+
+  keyboard.push([{ text: TELEGRAM_INFO_CHANNEL_REPLY_BUTTON }]);
 
   const supportUser = supportTelegramUsername?.replace('@', '').trim();
   if (supportUser) {

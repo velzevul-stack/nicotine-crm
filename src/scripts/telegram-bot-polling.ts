@@ -51,6 +51,12 @@ import {
   supportUsernameToTelegramUrl,
   TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT,
 } from '@/lib/telegram/support-username';
+import {
+  TELEGRAM_INFO_CHANNEL_INTRO,
+  TELEGRAM_INFO_CHANNEL_REPLY_BUTTON,
+  TELEGRAM_INFO_CHANNEL_URL,
+  infoChannelMessageFooter,
+} from '@/lib/telegram/info-channel';
 import { getSubscriptionKeyboard } from './bot/keyboards/subscription';
 import { getOnboardingKeyboard } from './bot/keyboards/onboarding';
 import { setupErrorHandler } from './bot/utils/error-handler';
@@ -747,7 +753,7 @@ bot.command('start', async (ctx) => {
 
 👇 Чтобы начать, выберите, как вы хотите использовать бота:${referralMessage}
 
-*Роль можно сменить в любой момент в профиле*`;
+*Роль можно сменить в любой момент в профиле*${infoChannelMessageFooter()}`;
 
     const keyboard = getOnboardingKeyboard();
     console.log('[Bot] Sending welcome message with keyboard:', JSON.stringify(keyboard, null, 2));
@@ -809,7 +815,8 @@ bot.command('start', async (ctx) => {
         `Ваша роль: ${roleText}\n` +
         `Статус подписки: ${user.subscriptionStatus === 'trial' ? 'Пробный период' : user.subscriptionStatus === 'active' ? 'Активна' : 'Истекла'}` +
         trialInfo +
-        subscriptionInfo,
+        subscriptionInfo +
+        infoChannelMessageFooter(),
       { reply_markup: menuKeyboard }
     );
     console.log('[Bot] Greeting message sent successfully');
@@ -1832,6 +1839,15 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  if (text === TELEGRAM_INFO_CHANNEL_REPLY_BUTTON) {
+    await ctx.reply(TELEGRAM_INFO_CHANNEL_INTRO, {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }]],
+      },
+    });
+    return;
+  }
+
   // Обработка кнопки "📝 Пост" - моментальная генерация поста
   if (text === '📝 Пост' || text.includes('Пост')) {
     console.log('[bot] Button "📝 Пост" pressed by user:', ctx.from.id, 'text:', text);
@@ -1885,16 +1901,19 @@ bot.on('text', async (ctx) => {
 🔹 /deleteformat [ID] - Удалить формат
 🔹 /formathelp - Справка по созданию форматов
 
-💡 Используйте кнопки меню для быстрого доступа к функциям!`;
+💡 Используйте кнопки меню для быстрого доступа к функциям!${infoChannelMessageFooter()}`;
 
     const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
     const supportUrl = supportUsernameToTelegramUrl(supportUsername);
+    const helpKeyboardRows: { text: string; url: string }[][] = [];
+    if (supportUrl) {
+      helpKeyboardRows.push([{ text: 'Поддержка', url: supportUrl }]);
+    }
+    helpKeyboardRows.push([{ text: 'Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }]);
     await ctx.reply(helpText, {
-      ...(supportUrl && {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
-        },
-      }),
+      reply_markup: {
+        inline_keyboard: helpKeyboardRows,
+      },
     });
     return;
   }

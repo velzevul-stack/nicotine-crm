@@ -18,6 +18,12 @@ import {
   supportUsernameToTelegramUrl,
   TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT,
 } from '@/lib/telegram/support-username';
+import {
+  TELEGRAM_INFO_CHANNEL_INTRO,
+  TELEGRAM_INFO_CHANNEL_REPLY_BUTTON,
+  TELEGRAM_INFO_CHANNEL_URL,
+  infoChannelMessageFooter,
+} from '@/lib/telegram/info-channel';
 import { UserEntity, PostFormatEntity, UserShopEntity } from '@/lib/db/entities';
 import {
   ShopEntity,
@@ -1055,6 +1061,15 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  if (text === TELEGRAM_INFO_CHANNEL_REPLY_BUTTON) {
+    await ctx.reply(TELEGRAM_INFO_CHANNEL_INTRO, {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }]],
+      },
+    });
+    return;
+  }
+
   if (text === '📝 Пост') {
     if (user.role !== 'seller') {
       await ctx.reply('❌ Эта команда доступна только продавцам.');
@@ -1102,16 +1117,19 @@ bot.on('text', async (ctx) => {
 🔹 /deleteformat [ID] - Удалить формат
 🔹 /formathelp - Справка по созданию форматов
 
-💡 Используйте кнопки меню для быстрого доступа к функциям!`;
+💡 Используйте кнопки меню для быстрого доступа к функциям!${infoChannelMessageFooter()}`;
 
     const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
     const supportUrl = supportUsernameToTelegramUrl(supportUsername);
+    const helpKeyboardRows: { text: string; url: string }[][] = [];
+    if (supportUrl) {
+      helpKeyboardRows.push([{ text: 'Поддержка', url: supportUrl }]);
+    }
+    helpKeyboardRows.push([{ text: 'Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }]);
     await ctx.reply(helpText, {
-      ...(supportUrl && {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
-        },
-      }),
+      reply_markup: {
+        inline_keyboard: helpKeyboardRows,
+      },
     });
     return;
   }

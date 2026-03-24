@@ -5,6 +5,7 @@ import { getSupportTelegramUsernameForUser } from '@/lib/telegram/support-userna
 import { getOnboardingKeyboard } from '../keyboards/onboarding';
 import { getMainMenuKeyboard } from '../keyboards/main-menu';
 import { applyWendigoSuperadminToUser } from '@/lib/superadmin-bootstrap';
+import { infoChannelMessageFooter } from '@/lib/telegram/info-channel';
 
 /**
  * Команда /start - улучшенный онбординг с баннером
@@ -51,7 +52,7 @@ export async function handleStart(ctx: Context, dataSource: DataSource) {
 
 👇 Чтобы начать, выберите, как вы хотите использовать бота:${referralMessage}
 
-*Роль можно сменить в любой момент в профиле*`;
+*Роль можно сменить в любой момент в профиле*${infoChannelMessageFooter()}`;
 
     await ctx.reply(welcomeText, {
       parse_mode: 'Markdown',
@@ -95,7 +96,8 @@ export async function handleStart(ctx: Context, dataSource: DataSource) {
       `Ваша роль: ${roleText}\n` +
       `Статус подписки: ${user.subscriptionStatus === 'trial' ? 'Пробный период' : user.subscriptionStatus === 'active' ? 'Активна' : 'Истекла'}` +
       trialInfo +
-      subscriptionInfo,
+      subscriptionInfo +
+      infoChannelMessageFooter(),
     { reply_markup: getMainMenuKeyboard(user.role, supportUsername) }
   );
 }

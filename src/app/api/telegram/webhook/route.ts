@@ -8,6 +8,12 @@ import {
   supportUsernameToTelegramUrl,
   TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT,
 } from '@/lib/telegram/support-username';
+import {
+  TELEGRAM_INFO_CHANNEL_INTRO,
+  TELEGRAM_INFO_CHANNEL_REPLY_BUTTON,
+  TELEGRAM_INFO_CHANNEL_URL,
+  infoChannelMessageFooter,
+} from '@/lib/telegram/info-channel';
 import { In, IsNull } from 'typeorm';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import {
@@ -84,6 +90,7 @@ function getMainMenu(supportTelegramUsername?: string | null) {
       { text: '❓ Помощь' },
     ],
   ];
+  keyboard.push([{ text: TELEGRAM_INFO_CHANNEL_REPLY_BUTTON }]);
   if (supportUser) {
     keyboard.push([{ text: TELEGRAM_REPLY_SUPPORT_BUTTON_TEXT }]);
   }
@@ -180,6 +187,7 @@ bot.command('start', async (ctx) => {
         inline_keyboard: [
           [{ text: 'Я Продавец', callback_data: 'role_seller' }],
           [{ text: 'Я Клиент', callback_data: 'role_client' }],
+          [{ text: '📢 Канал с новостями', url: TELEGRAM_INFO_CHANNEL_URL }],
         ],
       },
     };
@@ -188,7 +196,10 @@ bot.command('start', async (ctx) => {
       ? '\n\n🎁 Вы перешли по реферальной ссылке! При покупке подписки ваш пригласивший получит бесплатный месяц.'
       : '';
 
-    await ctx.reply('👋 Добро пожаловать! Выберите вашу роль:' + referralMessage, keyboard);
+    await ctx.reply(
+      '👋 Добро пожаловать! Выберите вашу роль:' + referralMessage + infoChannelMessageFooter(),
+      keyboard
+    );
     return;
   }
 
@@ -215,6 +226,7 @@ bot.command('start', async (ctx) => {
     reply_markup: {
       inline_keyboard: [
         [{ text: '🌐 Открыть приложение', web_app: { url: getMiniAppUrl() } }],
+        [{ text: '📢 Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }],
       ],
     },
   };
@@ -226,7 +238,8 @@ bot.command('start', async (ctx) => {
       trialInfo +
       subscriptionInfo +
       `\n\nИспользуйте /key для получения ключа доступа\n` +
-      `Используйте /me для информации о профиле`,
+      `Используйте /me для информации о профиле` +
+      infoChannelMessageFooter(),
     inlineKeyboard
   );
   
@@ -1651,6 +1664,15 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  if (text === TELEGRAM_INFO_CHANNEL_REPLY_BUTTON) {
+    await ctx.reply(TELEGRAM_INFO_CHANNEL_INTRO, {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }]],
+      },
+    });
+    return;
+  }
+
   if (text === '📋 Форматы') {
     // Вызываем логику команды /listformats
     if (user.role !== 'seller') {
@@ -1836,17 +1858,21 @@ bot.on('text', async (ctx) => {
 🔹 /deleteformat [ID] - Удалить формат
 🔹 /formathelp - Справка по созданию форматов
 
-💡 Используйте кнопки меню для быстрого доступа к функциям!`;
+💡 Используйте кнопки меню для быстрого доступа к функциям!${infoChannelMessageFooter()}`;
 
     const supportUsername = await getSupportTelegramUsernameForUser(ds, user);
     const supportUrl = supportUsernameToTelegramUrl(supportUsername);
 
+    const helpKeyboardRows: { text: string; url: string }[][] = [];
+    if (supportUrl) {
+      helpKeyboardRows.push([{ text: 'Поддержка', url: supportUrl }]);
+    }
+    helpKeyboardRows.push([{ text: 'Перейти в канал', url: TELEGRAM_INFO_CHANNEL_URL }]);
+
     await ctx.reply(helpText, {
-      ...(supportUrl && {
-        reply_markup: {
-          inline_keyboard: [[{ text: 'Поддержка', url: supportUrl }]],
-        },
-      }),
+      reply_markup: {
+        inline_keyboard: helpKeyboardRows,
+      },
     });
     return;
   }
