@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
-import { SaleEntity, SaleItemEntity, CardEntity, type Sale, type SaleItem } from '@/lib/db/entities';
+import {
+  SaleEntity,
+  SaleItemEntity,
+  CardEntity,
+  ShopEntity,
+  type Sale,
+  type SaleItem,
+} from '@/lib/db/entities';
 import { In } from 'typeorm';
-import { format, startOfDay, endOfDay, subDays } from 'date-fns';
+import { subDays } from 'date-fns';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+
+const DEFAULT_SHOP_TZ = 'Europe/Minsk';
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function startOfCalendarDayUtc(ymd: string, timeZone: string): Date {
+  return fromZonedTime(`${ymd}T00:00:00.000`, timeZone);
+}
+
+function endOfCalendarDayUtc(ymd: string, timeZone: string): Date {
+  return fromZonedTime(`${ymd}T23:59:59.999`, timeZone);
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,8 +30,8 @@ export async function GET(request: NextRequest) {
     if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
     const daysParam = request.nextUrl.searchParams.get('days');
-    const fromParam = request.nextUrl.searchParams.get('from');
-    const toParam = request.nextUrl.searchParams.get('to');
+    let fromParam = request.nextUrl.searchParams.get('from');
+    let toParam = request.nextUrl.searchParams.get('to');
     const reservationsOnly = request.nextUrl.searchParams.get('reservationsOnly') === '1';
 
     const toNumber = (v: unknown, fallback = 0) => {
@@ -25,28 +44,43 @@ export async function GET(request: NextRequest) {
     };
     const clampInt = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
-    let from: Date;
-    let to: Date = endOfDay(new Date());
+    const ds = await getDataSource();
+    const shop = await ds.getRepository(ShopEntity).findOne({
+      where: { id: session.shopId },
+    });
+    const timeZone = shop?.timezone && shop.timezone.trim() ? shop.timezone.trim() : DEFAULT_SHOP_TZ;
 
-    if (fromParam && toParam) {
-      const fromD = safeDate(fromParam);
-      const toD = safeDate(toParam);
-      if (fromD && toD) {
-        from = startOfDay(fromD);
-        to = endOfDay(toD);
-      } else {
-        const days = 30;
-        from = startOfDay(subDays(new Date(), days));
+    let from: Date;
+    let to: Date;
+
+    if (fromParam && toParam && YMD_RE.test(fromParam) && YMD_RE.test(toParam)) {
+      if (fromParam > toParam) {
+        const tmp = fromParam;
+        fromParam = toParam;
+        toParam = tmp;
       }
+      from = startOfCalendarDayUtc(fromParam, timeZone);
+      to = endOfCalendarDayUtc(toParam, timeZone);
+    } else if (fromParam && toParam) {
+      const days = 30;
+      const anchor = subDays(new Date(), days);
+      const fromYmd = formatInTimeZone(anchor, timeZone, 'yyyy-MM-dd');
+      const toYmd = formatInTimeZone(new Date(), timeZone, 'yyyy-MM-dd');
+      from = startOfCalendarDayUtc(fromYmd, timeZone);
+      to = endOfCalendarDayUtc(toYmd, timeZone);
     } else if (daysParam === 'all') {
-      from = startOfDay(new Date(2020, 0, 1));
+      from = startOfCalendarDayUtc('2020-01-01', timeZone);
+      const toYmd = formatInTimeZone(new Date(), timeZone, 'yyyy-MM-dd');
+      to = endOfCalendarDayUtc(toYmd, timeZone);
     } else {
       const parsed = daysParam ? Number.parseInt(daysParam, 10) : NaN;
       const days = Number.isFinite(parsed) ? clampInt(parsed, 1, 365) : 30;
-      from = startOfDay(subDays(new Date(), days));
+      const anchor = subDays(new Date(), days);
+      const fromYmd = formatInTimeZone(anchor, timeZone, 'yyyy-MM-dd');
+      const toYmd = formatInTimeZone(new Date(), timeZone, 'yyyy-MM-dd');
+      from = startOfCalendarDayUtc(fromYmd, timeZone);
+      to = endOfCalendarDayUtc(toYmd, timeZone);
     }
-
-    const ds = await getDataSource();
 
     const cards = await ds.getRepository(CardEntity).find({
       where: { shopId: session.shopId },
@@ -146,7 +180,7 @@ export async function GET(request: NextRequest) {
     >();
 
     for (const s of sales) {
-      const dateStr = format(s.datetime, 'yyyy-MM-dd');
+      const dateStr = formatInTimeZone(s.datetime, timeZone, 'yyyy-MM-dd');
       const existing = byDate.get(dateStr);
       const isReservation = (s as any).isReservation ?? false;
 
@@ -190,7 +224,7 @@ export async function GET(request: NextRequest) {
           discountTotal: isReservation ? 0 : (s.discountValue ?? 0),
           reservationsCount: isReservation ? 1 : 0,
           reservationsAmount: isReservation ? s.finalAmount : 0,
-          lastSaleTime: format(s.datetime, 'HH:mm'),
+          lastSaleTime: formatInTimeZone(s.datetime, timeZone, 'HH:mm'),
           lastSaleDescription: shortDesc || 'Продажа',
           sales: [s],
         });
@@ -220,7 +254,7 @@ export async function GET(request: NextRequest) {
             });
           }
         }
-        existing.lastSaleTime = format(s.datetime, 'HH:mm');
+        existing.lastSaleTime = formatInTimeZone(s.datetime, timeZone, 'HH:mm');
         existing.lastSaleDescription = shortDesc || existing.lastSaleDescription;
         existing.sales.push(s);
       }
@@ -230,7 +264,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       dayReports,
-      dateRange: { from: format(from, 'yyyy-MM-dd'), to: format(to, 'yyyy-MM-dd') },
+      dateRange: {
+        from: formatInTimeZone(from, timeZone, 'yyyy-MM-dd'),
+        to: formatInTimeZone(to, timeZone, 'yyyy-MM-dd'),
+      },
     });
   } catch (err) {
     console.error('Reports API error:', err);

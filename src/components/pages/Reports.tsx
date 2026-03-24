@@ -99,10 +99,17 @@ export function Reports() {
         // Use a very old date to get all data
         from = startOfDay(new Date(2020, 0, 1));
         break;
-      case 'custom':
-        from = dateFrom ? startOfDay(dateFrom) : startOfDay(startOfMonth(today));
-        to = dateTo ? endOfDay(dateTo) : endOfDay(today);
+      case 'custom': {
+        let f = dateFrom ? startOfDay(dateFrom) : startOfDay(startOfMonth(today));
+        let t = dateTo ? endOfDay(dateTo) : endOfDay(today);
+        if (dateFrom && dateTo && f > t) {
+          f = startOfDay(dateTo);
+          t = endOfDay(dateFrom);
+        }
+        from = f;
+        to = t;
         break;
+      }
       default:
         from = startOfDay(startOfMonth(today));
     }

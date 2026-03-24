@@ -244,9 +244,10 @@ export async function PATCH(
       sale.customerName = parsed.data.customerName?.trim() || null;
     }
     if (parsed.data.saleDate !== undefined && parsed.data.saleDate) {
-      // Преобразуем формат "yyyy-MM-ddTHH:mm" в Date
       const dateStr = parsed.data.saleDate;
-      sale.saleDate = new Date(dateStr.includes('Z') || dateStr.includes('+') ? dateStr : `${dateStr}:00`);
+      const next = new Date(dateStr.includes('Z') || dateStr.includes('+') ? dateStr : `${dateStr}:00`);
+      sale.saleDate = next;
+      sale.datetime = next;
     }
     if (parsed.data.isReservation !== undefined) {
       sale.isReservation = parsed.data.isReservation;

@@ -13,6 +13,7 @@ import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { format } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import { ru } from 'date-fns/locale/ru';
 import { ReceiveModal } from '@/components/inventory/ReceiveModal';
 import type { ReportsResponse, DebtsResponse, ReservesResponse, InventoryResponse } from '@/types/api';
@@ -27,10 +28,12 @@ export function Dashboard() {
   });
   const { data: shopData } = useQuery({
     queryKey: ['shop'],
-    queryFn: () => api<{ name: string; address: string | null; currency: string }>('/api/shop'),
+    queryFn: () =>
+      api<{ name: string; address: string | null; currency: string; timezone?: string }>('/api/shop'),
   });
+  const shopTz = shopData?.timezone?.trim() || 'Europe/Minsk';
   const { data: reportsData, isLoading: reportsLoading } = useQuery({
-    queryKey: ['reports', 7],
+    queryKey: ['reports', 7, shopTz],
     queryFn: () => api<ReportsResponse>('/api/reports?days=7'),
   });
   const { data: debtsData } = useQuery({
@@ -47,7 +50,7 @@ export function Dashboard() {
   });
 
   const dayReports = reportsData?.dayReports ?? [];
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const todayStr = formatInTimeZone(new Date(), shopTz, 'yyyy-MM-dd');
   const today = dayReports.find((d) => d.date === todayStr) ?? {
     date: todayStr,
     salesCount: 0,

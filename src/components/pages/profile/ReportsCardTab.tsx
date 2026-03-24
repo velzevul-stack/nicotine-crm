@@ -6,16 +6,17 @@ import { BarChart3, ChevronRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { formatCurrency } from '@/lib/currency';
-import { format } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 
 export function ReportsCardTab() {
   const { data: shopData } = useQuery({
     queryKey: ['shop'],
-    queryFn: () => api<{ currency: string }>('/api/shop'),
+    queryFn: () => api<{ currency: string; timezone?: string }>('/api/shop'),
   });
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const shopTz = shopData?.timezone?.trim() || 'Europe/Minsk';
+  const today = formatInTimeZone(new Date(), shopTz, 'yyyy-MM-dd');
   const { data } = useQuery({
-    queryKey: ['reports', today],
+    queryKey: ['reports', today, shopTz],
     queryFn: () => {
       const params = new URLSearchParams();
       params.set('from', today);
