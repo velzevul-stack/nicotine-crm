@@ -24,7 +24,7 @@ const createSchema = z.object({
   formatName: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   strengthLabel: z.string().optional(), // Для жидкостей/снюса - крепость (mg), для расходников - сопротивление (Ω)
   ohmValue: z.string().optional(), // Для расходников - омы (0.4, 1, 0.6)
-  resistanceValue: z.string().optional(), // Для расходников - сопротивление (Ω)
+  resistanceValue: z.string().optional(), // Для расходников — доп. подпись к позиции (текст)
   // Клиент шлёт flavorName: "" для расходников — без preprocess Zod ломает .min(1).optional()
   flavorName: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   costPrice: z.number().finite().min(0, { message: 'Себестоимость не может быть отрицательной' }),
@@ -296,12 +296,11 @@ export async function POST(request: NextRequest) {
     } else {
       // Старая логика для обратной совместимости
       if (isConsumable) {
-        // Для расходников: Flavor = количество в скобках или пустое
-        // Формат отображения: "GTX COIL 0.6 (1)" - омы уже в formatName
-        if (resistanceValue) {
-          finalFlavorName = `(${resistanceValue})`;
+        // Для расходников: Flavor = доп. подпись (текст) или пустое; омы уже в formatName
+        if (resistanceValue?.trim()) {
+          finalFlavorName = resistanceValue.trim();
         } else {
-          finalFlavorName = ''; // Пустое для расходников без указания количества
+          finalFlavorName = '';
         }
       } else if (isDevice) {
         // Для устройств: Flavor = цвет

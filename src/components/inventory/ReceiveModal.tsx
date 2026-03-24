@@ -659,7 +659,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     brandEmoji: '',
     strengthLabel: '', // Жидкости/снюс: мг; кастомные поля strength_label
     ohmValue: '', // Расходники: номинал Ом
-    consumablePackQty: '', // Расходники: опционально — подпись к позиции (бывш. «в скобках»)
+    consumablePackQty: '', // Расходники: опционально — доп. текст к позиции (вкус/подпись)
     flavorName: '',
     costPrice: 0,
     unitPrice: 0,
@@ -774,7 +774,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     e.preventDefault();
 
     let legacyConsumableOhmNormalized: string | undefined;
-    let legacyConsumableResistanceNormalized: string | undefined;
+    let consumableExtraLabel: string | undefined;
     
     if (isNewBrand && similarBrands.length > 0) {
       toast({
@@ -866,16 +866,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       legacyConsumableOhmNormalized = ohmParsed.normalized;
 
       if (formData.consumablePackQty?.trim()) {
-        const qtyParsed = normalizeDecimalNumericInput(formData.consumablePackQty);
-        if (!qtyParsed.ok) {
-          toast({
-            title: 'Ошибка',
-            description: 'Во втором поле — только число, например 1 или 0,8.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        legacyConsumableResistanceNormalized = qtyParsed.normalized;
+        consumableExtraLabel = formData.consumablePackQty.trim();
       }
     }
 
@@ -968,10 +959,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
 
     if (isConsumableCategory) {
       payload.ohmValue = legacyConsumableOhmNormalized ?? formData.ohmValue.trim();
-      payload.resistanceValue =
-        legacyConsumableResistanceNormalized !== undefined
-          ? legacyConsumableResistanceNormalized
-          : undefined;
+      payload.resistanceValue = consumableExtraLabel;
     }
 
     if (createNewCategory) {
@@ -1436,10 +1424,10 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                     onChange={(e) =>
                       setFormData({ ...formData, consumablePackQty: e.target.value })
                     }
-                    placeholder="Например 5 — если нужно количество в упаковке"
+                    placeholder="Например: 5 шт, Mesh, красный"
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Только число. Будет показано рядом с омами в списке товаров, если заполнить
+                    Любой текст — будет показан рядом с омами в списке товаров, если заполнить
                   </p>
                 </div>
               ) : null}
@@ -1607,7 +1595,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 else if (isSnusCategory || isLiquidCategory || isDisposableCategory) fieldLabel = 'Вкус';
                 
                 if (isConsumableCategory && formData.consumablePackQty?.trim()) {
-                  flavorDisplay = `(${formData.consumablePackQty.trim()})`;
+                  flavorDisplay = formData.consumablePackQty.trim();
                 } else {
                   flavorDisplay = flavorName || fieldLabel;
                 }
