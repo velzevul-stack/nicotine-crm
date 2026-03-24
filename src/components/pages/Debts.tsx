@@ -6,7 +6,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { ChevronRight, DollarSign, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from '@/hooks/use-toast';
 import { useHintSeen } from '@/hooks/use-hint-seen';
 import {
@@ -227,7 +227,7 @@ export function Debts() {
           <div className="space-y-3 mt-2">
             <input
               type="number"
-              placeholder={`Сумма (${shopData?.currency || 'BYN'})`}
+              placeholder={`Сумма (${getCurrencySymbol(shopData?.currency)})`}
               value={paymentAmount}
               onChange={(e) => setPaymentAmount(e.target.value)}
               className="w-full h-10 px-4 rounded-xl bg-secondary border border-border text-sm font-mono-nums"

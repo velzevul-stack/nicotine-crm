@@ -1,6 +1,7 @@
 import { Context } from 'telegraf';
 import { DataSource } from 'typeorm';
-import { UserEntity, UserShopEntity, SaleEntity } from '@/lib/db/entities';
+import { UserEntity, UserShopEntity, SaleEntity, ShopEntity } from '@/lib/db/entities';
+import { getCurrencySymbol } from '@/lib/currency';
 import { getSupportTelegramUsernameForUser } from '@/lib/telegram/support-username';
 import { getProfileKeyboard } from '../keyboards/profile';
 import { getMainMenuKeyboard } from '../keyboards/main-menu';
@@ -66,6 +67,10 @@ export async function handleProfile(ctx: Context, dataSource: DataSource) {
     const userShop = await userShopRepo.findOne({ where: { userId: user.id } });
     
     if (userShop) {
+      const shop = await dataSource.getRepository(ShopEntity).findOne({
+        where: { id: userShop.shopId },
+      });
+      const curSym = getCurrencySymbol(shop?.currency);
       const saleRepo = dataSource.getRepository(SaleEntity);
       const todayStart = startOfDay(new Date());
       const todayEnd = endOfDay(new Date());
@@ -94,12 +99,12 @@ export async function handleProfile(ctx: Context, dataSource: DataSource) {
       
       profileText += `\n💰 Продажи сегодня:\n`;
       profileText += `— Продаж: ${salesCount}\n`;
-      profileText += `— Наличка: ${todayCash.toFixed(2)} BYN\n`;
-      profileText += `— Карта: ${todayCard.toFixed(2)} BYN\n`;
+      profileText += `— Наличка: ${todayCash.toFixed(2)} ${curSym}\n`;
+      profileText += `— Карта: ${todayCard.toFixed(2)} ${curSym}\n`;
       if (todayDebt > 0) {
-        profileText += `— В долг: ${todayDebt.toFixed(2)} BYN\n`;
+        profileText += `— В долг: ${todayDebt.toFixed(2)} ${curSym}\n`;
       }
-      profileText += `— Итого: ${todayRevenue.toFixed(2)} BYN\n`;
+      profileText += `— Итого: ${todayRevenue.toFixed(2)} ${curSym}\n`;
     }
   }
 

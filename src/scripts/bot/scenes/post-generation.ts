@@ -15,6 +15,7 @@ import {
   PostFormatEntity,
   SaleEntity,
   SaleItemEntity,
+  UserShopEntity,
 } from '@/lib/db/entities';
 import { In, IsNull } from 'typeorm';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
@@ -355,6 +356,7 @@ export async function handlePostCallbacks(
       const postData: PostData = {
         categories: categoriesData,
         shop: shopData,
+        currencyCode: shop?.currency ?? 'BYN',
       };
 
       const postText = renderTemplate(template, postData, formatConfig);

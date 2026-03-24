@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Plus, Minus, ScanLine, PackagePlus, ChevronRight, ChevronDown, ArrowLeft, Check, X, AlertCircle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiException } from '@/lib/api-client';
+import { getCurrencySymbol } from '@/lib/currency';
 import { useToast } from '@/hooks/use-toast';
 import { ScanModal } from './ScanModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -453,8 +454,8 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
                     </div>
                   ) : (
                     receiveItems.map((item) => {
-                      const currency = shopData?.currency || 'BYN';
-                      const previewText = `${item.brandEmoji}${item.formatName}${item.formatStrengthLabel ? ' ' + item.formatStrengthLabel : ''}${item.brandEmoji}: (${item.formatUnitPrice || 0} ${currency})\n• ${item.name}`;
+                      const curSym = getCurrencySymbol(shopData?.currency);
+                      const previewText = `${item.brandEmoji}${item.formatName}${item.formatStrengthLabel ? ' ' + item.formatStrengthLabel : ''}${item.brandEmoji}: (${item.formatUnitPrice || 0} ${curSym})\n• ${item.name}`;
                       
                       return (
                         <motion.div
@@ -471,7 +472,7 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
                               </p>
                               {receiveItems.length === 1 && (
                                 <div className="mt-2">
-                                  <label className="text-[10px] text-muted-foreground">Закупка (руб)</label>
+                                  <label className="text-[10px] text-muted-foreground">Закупка ({curSym})</label>
                                   <input
                                     type="number"
                                     step="0.01"
@@ -1474,7 +1475,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
               />
             </div>
             <div className="space-y-2">
-              <Label>Цена продажи</Label>
+              <Label>Цена продажи ({getCurrencySymbol(shopData?.currency)})</Label>
               <Input 
                 type="number" 
                 step="0.01"
@@ -1496,7 +1497,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
 
           {/* Preview */}
           {(() => {
-            const currency = shopData?.currency || 'BYN';
+            const curSym = getCurrencySymbol(shopData?.currency);
             let brandName = '';
             let brandEmoji = '';
             let unitPrice = 0;
@@ -1612,7 +1613,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 }
             }
 
-            const previewText = `${brandEmoji || ''}${displayFormatName}${brandEmoji || ''}: (${unitPrice || 0} ${currency})\n• ${flavorDisplay}`;
+            const previewText = `${brandEmoji || ''}${displayFormatName}${brandEmoji || ''}: (${unitPrice || 0} ${curSym})\n• ${flavorDisplay}`;
 
             return (
               <div className="p-3 rounded-lg bg-secondary/80 border border-border">

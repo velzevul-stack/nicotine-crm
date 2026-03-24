@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from '@/hooks/use-toast';
 import { DateTimePicker } from '@/components/ui/datetime-picker';
 import type {
@@ -499,7 +499,7 @@ export function SaleFormModal({
           {/* Discount */}
           <div>
             <label className="text-xs font-medium text-[#9CA3AF] mb-1 block">
-              Скидка ({shopData?.currency || 'BYN'})
+              Скидка ({getCurrencySymbol(shopData?.currency)})
             </label>
             <input
               type="number"

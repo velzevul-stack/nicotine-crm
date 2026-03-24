@@ -6,7 +6,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { Search, Plus, Minus, X, ShoppingCart, CreditCard, Banknote, Wallet, ChevronRight, ArrowLeft, Clock } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DateTimePicker } from '@/components/ui/datetime-picker';
 import { useToast } from '@/hooks/use-toast';
@@ -623,7 +623,7 @@ export function Sales() {
 
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                Скидка ({shopData?.currency || 'BYN'})
+                Скидка ({getCurrencySymbol(shopData?.currency)})
               </p>
               <input
                 type="number"

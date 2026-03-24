@@ -43,17 +43,17 @@ export function FormatVariables() {
       template: `➡️ ТОВАРЫ УЖЕ В НАЛИЧИИ!
 
 • При покупке пода вы получаете жидкость в подарок
-• При заказе от 50р доставка до дома бесплатная
+• При заказе от суммы по договорённости — доставка до дома бесплатная
 
 {loop:categories}
 {category.emoji} {category.name}
 {loop:formats}
-👼 | {format.name} — {format.price}р
+👼 | {format.name} — {format.price} {currency}
 {/loop}
 {/loop}
 
 📱 Самовывоз: Центр, БРУ, Юбилейный
-🤝 Доставка по городу — 5р`,
+🤝 Доставка по городу — уточняйте`,
     },
     {
       name: 'Формат с остатками',
@@ -64,7 +64,7 @@ export function FormatVariables() {
 {category.emoji} {category.name.toUpperCase()} {category.emoji}
 
 {loop:formats}
-{format.name} ({format.price} BYN)
+{format.name} ({format.price} {currency})
 {if:hasFlavors}
 {loop:flavors}
 • {flavor.name} — остаток: {flavor.stock}
@@ -186,7 +186,7 @@ export function FormatVariables() {
                     <code className="bg-background px-2 py-1 rounded font-mono text-xs">
                       {'{format.price}'}
                     </code>
-                    <span className="text-xs text-muted-foreground">Цена в BYN</span>
+                    <span className="text-xs text-muted-foreground">Число; валюта — {'{currency}'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <code className="bg-background px-2 py-1 rounded font-mono text-xs">
@@ -229,6 +229,18 @@ export function FormatVariables() {
                       {'{shop.address}'}
                     </code>
                     <span className="text-xs text-muted-foreground">Адрес магазина</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="bg-background px-2 py-1 rounded font-mono text-xs">
+                      {'{currency}'}
+                    </code>
+                    <span className="text-xs text-muted-foreground">Символ валюты из настроек</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="bg-background px-2 py-1 rounded font-mono text-xs">
+                      {'{currencyCode}'}
+                    </code>
+                    <span className="text-xs text-muted-foreground">Код валюты (BYN, USD, RUB…)</span>
                   </div>
                 </div>
               </div>
@@ -317,7 +329,7 @@ export function FormatVariables() {
 {`{loop:categories}
   {loop:brands}
     {loop:formats}
-      👼 | {format.name} — {format.price}р
+      👼 | {format.name} — {format.price} {currency}
       // здесь доступны переменные format.*
     {/loop}
   {/loop}

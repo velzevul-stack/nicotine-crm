@@ -29,7 +29,7 @@ const variables = {
   ],
   'Форматы': [
     { label: 'Название формата', value: '{format.name}', desc: 'Название формата продукта' },
-    { label: 'Цена формата', value: '{format.price}', desc: 'Цена в BYN' },
+    { label: 'Цена формата', value: '{format.price}', desc: 'Число; символ валюты — через {currency}' },
     { label: 'Крепость', value: '{format.strength}', desc: 'Крепость (если есть)' },
   ],
   'Вкусы': [
@@ -39,6 +39,8 @@ const variables = {
   'Магазин': [
     { label: 'Название магазина', value: '{shop.name}', desc: 'Название вашего магазина' },
     { label: 'Адрес магазина', value: '{shop.address}', desc: 'Адрес магазина' },
+    { label: 'Символ валюты', value: '{currency}', desc: 'Из настроек магазина (₽, $, BYN…)' },
+    { label: 'Код валюты', value: '{currencyCode}', desc: 'ISO-код: BYN, USD, RUB…' },
   ],
 };
 
@@ -51,7 +53,7 @@ const conditions = [
 const loops = [
   { label: 'Цикл по категориям', value: '{loop:categories}\n  {category.name}\n{/loop}', desc: 'Перебрать все категории' },
   { label: 'Цикл по брендам', value: '{loop:brands}\n  {brand.name}\n{/loop}', desc: 'Перебрать все бренды (внутри категории)' },
-  { label: 'Цикл по форматам', value: '{loop:formats}\n  {format.name} - {format.price}р\n{/loop}', desc: 'Перебрать все форматы (внутри бренда)' },
+  { label: 'Цикл по форматам', value: '{loop:formats}\n  {format.name} - {format.price} {currency}\n{/loop}', desc: 'Перебрать все форматы (внутри бренда)' },
   { label: 'Цикл по вкусам', value: '{loop:flavors}\n  • {flavor.name}\n{/loop}', desc: 'Перебрать все вкусы (внутри формата)' },
 ];
 

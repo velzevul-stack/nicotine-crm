@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { getCurrencySymbol } from '@/lib/currency';
 
 interface ProductCardProps {
   brand: string;
@@ -9,6 +10,8 @@ interface ProductCardProps {
   stock: number;
   buyPrice: number;
   sellPrice: number;
+  /** Код валюты магазина (BYN, USD, RUB…) */
+  currencyCode?: string;
   onClick?: () => void;
   delay?: number;
 }
@@ -20,9 +23,11 @@ export function ProductCard({
   stock,
   buyPrice,
   sellPrice,
+  currencyCode,
   onClick,
   delay = 0,
 }: ProductCardProps) {
+  const sym = getCurrencySymbol(currencyCode);
   const isLowStock = stock < 5;
 
   return (
@@ -54,8 +59,12 @@ export function ProductCard({
       <div className="flex items-center justify-between">
         <div className="text-xs text-muted-foreground">{category}</div>
         <div className="flex gap-3 text-sm">
-          <span className="text-muted-foreground">{buyPrice}₽</span>
-          <span className="text-primary font-semibold">{sellPrice}₽</span>
+          <span className="text-muted-foreground">
+            {buyPrice} {sym}
+          </span>
+          <span className="text-primary font-semibold">
+            {sellPrice} {sym}
+          </span>
         </div>
       </div>
     </motion.div>

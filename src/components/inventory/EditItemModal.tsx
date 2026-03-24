@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
+import { getCurrencySymbol } from '@/lib/currency';
 import { Trash2 } from 'lucide-react';
 
 interface EditItemModalProps {
@@ -20,6 +21,12 @@ interface EditItemModalProps {
 export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: shopData } = useQuery({
+    queryKey: ['shop'],
+    queryFn: () => api<{ currency: string }>('/api/shop'),
+    enabled: open,
+  });
+  const curLabel = getCurrencySymbol(shopData?.currency);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -228,7 +235,7 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="price">Цена продажи (BYN)</Label>
+              <Label htmlFor="price">Цена продажи ({curLabel})</Label>
               <Input
                 id="price"
                 type="number"
@@ -239,7 +246,7 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
               <p className="text-[10px] text-muted-foreground">Влияет на весь формат {item.format.name}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cost">Себестоимость (BYN)</Label>
+              <Label htmlFor="cost">Себестоимость ({curLabel})</Label>
               <Input
                 id="cost"
                 type="number"

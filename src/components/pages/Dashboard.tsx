@@ -9,7 +9,7 @@ import { KPICard, CARD_COLORS } from '@/components/KPICard';
 import { KPISkeleton } from '@/components/KPISkeleton';
 import { HourlyChartCard } from '@/components/HourlyChartCard';
 import { ShoppingCart, Package, FileText, Users, TrendingUp, CreditCard, PackagePlus, Settings, ChevronRight } from 'lucide-react';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { format } from 'date-fns';
@@ -73,7 +73,8 @@ export function Dashboard() {
       ? inventoryData.items.reduce((s, f) => s + (f.quantity ?? 0), 0)
       : 0;
 
-  const currency = shopData?.currency || 'BYN';
+  const currencyCode = shopData?.currency ?? 'BYN';
+  const currencySubtitle = getCurrencySymbol(currencyCode);
 
   const hourlyData = (() => {
     const sales = today.sales ?? [];
@@ -132,7 +133,7 @@ export function Dashboard() {
               <KPICard
                 title="Сегодня"
                 value={todayValue}
-                subtitle={currency}
+                subtitle={currencySubtitle}
                 icon={TrendingUp}
                 color="mint"
                 delay={0.1}
@@ -140,7 +141,7 @@ export function Dashboard() {
               <KPICard
                 title="Долги"
                 value={debtValue}
-                subtitle={currency}
+                subtitle={currencySubtitle}
                 icon={CreditCard}
                 color="mint"
                 delay={0.2}
@@ -264,9 +265,9 @@ export function Dashboard() {
             <div className="space-y-3">
               {[
                 { label: 'Продаж', value: `${today.salesCount} шт` },
-                { label: 'Наличка', value: formatCurrency(today.cashAmount ?? 0, currency) },
-                { label: 'Карта', value: formatCurrency(today.cardAmount ?? 0, currency) },
-                { label: 'В долг', value: formatCurrency(today.debtAmount ?? 0, currency) },
+                { label: 'Наличка', value: formatCurrency(today.cashAmount ?? 0, currencyCode) },
+                { label: 'Карта', value: formatCurrency(today.cardAmount ?? 0, currencyCode) },
+                { label: 'В долг', value: formatCurrency(today.debtAmount ?? 0, currencyCode) },
                 { label: 'Резервы', value: `${today.reservationsCount ?? 0} шт` },
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between">
@@ -277,7 +278,7 @@ export function Dashboard() {
               <div className="pt-3 border-t border-white/10 flex items-center justify-between">
                 <span className="text-[#F5F5F7] font-semibold">Итого</span>
                 <span className="text-[#BFE7E5] font-bold text-lg">
-                  {formatCurrency(today.revenue ?? 0, currency)}
+                  {formatCurrency(today.revenue ?? 0, currencyCode)}
                 </span>
               </div>
             </div>
@@ -321,7 +322,7 @@ export function Dashboard() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-[#F2D6DE] font-bold text-lg">
-                      {formatCurrency(debt.totalDebt, currency)}
+                      {formatCurrency(debt.totalDebt, currencyCode)}
                     </span>
                     <ChevronRight size={18} className="text-[#6B7280]" strokeWidth={1.5} />
                   </div>
@@ -382,7 +383,7 @@ export function Dashboard() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[#DED8F6] font-bold text-lg">
-                        {formatCurrency(reserve.finalAmount, currency)}
+                        {formatCurrency(reserve.finalAmount, currencyCode)}
                       </span>
                       <ChevronRight size={18} className="text-[#6B7280]" strokeWidth={1.5} />
                     </div>
@@ -426,12 +427,12 @@ export function Dashboard() {
                     </span>
                   </div>
                   <p className="text-xs text-[#9CA3AF]">
-                    {day.lastSaleDescription || formatCurrency(day.revenue ?? 0, currency)}
+                    {day.lastSaleDescription || formatCurrency(day.revenue ?? 0, currencyCode)}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 ml-3">
                   <span className="text-[#BFE7E5] font-bold">
-                    {formatCurrency(day.revenue ?? 0, currency)}
+                    {formatCurrency(day.revenue ?? 0, currencyCode)}
                   </span>
                   <ChevronRight size={18} className="text-[#6B7280]" strokeWidth={1.5} />
                 </div>

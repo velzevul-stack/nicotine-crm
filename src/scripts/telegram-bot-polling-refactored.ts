@@ -664,9 +664,10 @@ bot.command('formathelp', async (ctx) => {
 • \`{content}\` - основной контент (категории, бренды, форматы, вкусы)
 • \`{category.name}\`, \`{category.emoji}\` - данные категории
 • \`{brand.name}\`, \`{brand.emojiPrefix}\` - данные бренда
-• \`{format.name}\`, \`{format.price}\`, \`{format.strength}\` - данные формата
+• \`{format.name}\`, \`{format.price}\` (число), \`{format.strength}\` - данные формата
 • \`{flavor.name}\`, \`{flavor.stock}\` - данные вкуса
 • \`{shop.name}\`, \`{shop.address}\` - данные магазина
+• \`{currency}\`, \`{currencyCode}\` - символ и код валюты магазина (рядом с ценой: \`{format.price} {currency}\`)
 
 **Условия:**
 • \`{if:hasFlavors}...{/if}\` - показывать, если есть вкусы

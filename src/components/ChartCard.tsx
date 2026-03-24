@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from 'recharts';
 import { TrendingUp } from 'lucide-react';
+import { getCurrencySymbol } from '@/lib/currency';
 
 interface ChartDataPoint {
   day: string;
@@ -34,7 +35,7 @@ export function ChartCard({
   total,
   trend,
   delay = 0,
-  currency = '₽',
+  currency = getCurrencySymbol('BYN'),
 }: ChartCardProps) {
   const weekData =
     data ||

@@ -243,6 +243,7 @@ export async function POST(request: NextRequest) {
   const postData: PostData = {
     categories: categoriesData,
     shop: shopData,
+    currencyCode: shop?.currency ?? 'BYN',
   };
 
   // Render template

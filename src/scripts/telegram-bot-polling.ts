@@ -657,6 +657,7 @@ async function generateAndSendPostImmediately(ctx: any, userId: number, userShop
     const postData: PostData = {
       categories: categoriesData,
       shop: shopData,
+      currencyCode: shop?.currency ?? 'BYN',
     };
 
     console.log('[generateAndSendPostImmediately] Template:', template.substring(0, 100));
@@ -1274,9 +1275,10 @@ bot.command('formathelp', async (ctx) => {
 • \`{content}\` - основной контент (категории, бренды, форматы, вкусы)
 • \`{category.name}\`, \`{category.emoji}\` - данные категории
 • \`{brand.name}\`, \`{brand.emojiPrefix}\` - данные бренда
-• \`{format.name}\`, \`{format.price}\`, \`{format.strength}\` - данные формата
+• \`{format.name}\`, \`{format.price}\` (число), \`{format.strength}\` - данные формата
 • \`{flavor.name}\`, \`{flavor.stock}\` - данные вкуса
 • \`{shop.name}\`, \`{shop.address}\` - данные магазина
+• \`{currency}\`, \`{currencyCode}\` - символ и код валюты магазина (рядом с ценой: \`{format.price} {currency}\`)
 
 **Условия:**
 • \`{if:hasFlavors}...{/if}\` - показывать, если есть вкусы
@@ -2240,9 +2242,14 @@ bot.action(/^post_(.+)$/, async (ctx) => {
         ]);
       });
 
+      const shopRow = await ds.getRepository(ShopEntity).findOne({
+        where: { id: userShop.shopId },
+      });
+
       const outputPath = path.join(os.tmpdir(), `stock-table-${userShop.shopId}-${Date.now()}.xlsx`);
       await generateStockTable(
         {
+          currencyCode: shopRow?.currency ?? 'BYN',
           categories: categories.map((c) => ({ id: c.id, name: c.name, emoji: c.emoji || '' })),
           brands: brands.map((b) => ({
             id: b.id,
@@ -2815,6 +2822,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
       const postData: PostData = {
         categories: categoriesData,
         shop: shopData,
+        currencyCode: shop?.currency ?? 'BYN',
       };
 
       const postText = renderTemplate(template, postData, formatConfig);

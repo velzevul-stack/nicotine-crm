@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import path from 'path';
 import fs from 'fs';
 import { isSafePhotoUrl } from '@/lib/image-validate';
+import { getCurrencySymbol } from '@/lib/currency';
 
 export interface ExcelGeneratorInput {
   categories: Array<{
@@ -31,6 +32,7 @@ export interface ExcelGeneratorInput {
   }>;
   stocks: Array<{ flavorId: string; quantity: number }>;
   includeBrandPhotos?: boolean;
+  currencyCode?: string;
 }
 
 const ROW_HEIGHT_PX = 18;
@@ -95,6 +97,11 @@ export async function generateStockTable(
 ): Promise<string> {
   const wb = new ExcelJS.Workbook();
   const stockMap = new Map(input.stocks.map((s) => [s.flavorId, s.quantity]));
+  const curSym = getCurrencySymbol(input.currencyCode ?? 'BYN');
+  const priceInline = (unitPrice: number) =>
+    unitPrice ? ` - ${unitPrice} ${curSym}` : '';
+  const priceOnly = (unitPrice: number) =>
+    unitPrice ? `${unitPrice} ${curSym}` : '';
 
   // Жидкости
   const liquidsCat = input.categories.find((c) => categoryType(c.name) === 'liquids');
@@ -124,7 +131,7 @@ export async function generateStockTable(
 
         const formatLabel = [format.name, format.strengthLabel].filter(Boolean).join(' ');
         const brandFormatLabel = `${brand.name} ${formatLabel}`.trim();
-        const priceStr = format.unitPrice ? ` - ${format.unitPrice}р` : '';
+        const priceStr = priceInline(format.unitPrice);
 
         const brandCell = ws.getRow(row).getCell(1);
         brandCell.value = `${brandFormatLabel}${priceStr}`;
@@ -171,7 +178,7 @@ export async function generateStockTable(
         if (!brand) continue;
         const str = (format.strengthLabel || '').replace(/мг/gi, 'mg').trim() || 'other';
         if (!byStrength.has(str)) byStrength.set(str, []);
-        const priceStr = format.unitPrice ? ` - ${format.unitPrice}р` : '';
+        const priceStr = priceInline(format.unitPrice);
         for (const fl of input.flavors.filter((f) => f.productFormatId === format.id)) {
           byStrength.get(str)!.push({
             brand: brand.name,
@@ -215,7 +222,7 @@ export async function generateStockTable(
     for (const format of input.formats.filter((f) => deviceBrands.some((b) => b.id === f.brandId))) {
       const brand = input.brands.find((b) => b.id === format.brandId);
       const flavors = input.flavors.filter((f) => f.productFormatId === format.id);
-      const priceStr = format.unitPrice ? ` - ${format.unitPrice}р` : '';
+      const priceStr = priceInline(format.unitPrice);
       const formatCell = ws.getRow(row).getCell(1);
       formatCell.value = `${format.name}${priceStr}`;
       applyBrandStyle(formatCell);
@@ -244,7 +251,7 @@ export async function generateStockTable(
     const r2c1 = ws.getRow(2).getCell(1);
     const r2c2 = ws.getRow(2).getCell(2);
     r2c1.value = 'Наименование';
-    r2c2.value = 'Цена BYN';
+    r2c2.value = `Цена (${curSym})`;
     applyInfoStyle(r2c1);
     applyInfoStyle(r2c2);
     let row = 3;
@@ -261,7 +268,7 @@ export async function generateStockTable(
             const c1 = ws.getRow(row).getCell(1);
             const c2 = ws.getRow(row).getCell(2);
             c1.value = `${format.name} ${fl.name}`;
-            c2.value = format.unitPrice ? `${format.unitPrice}р` : '';
+            c2.value = format.unitPrice ? priceOnly(format.unitPrice) : '';
             const qty = stockMap.get(fl.id) ?? 0;
             if (qty === 0) applyOutOfStockStyle(c1);
             else applyTextStyle(c1);
@@ -272,7 +279,7 @@ export async function generateStockTable(
           const c1 = ws.getRow(row).getCell(1);
           const c2 = ws.getRow(row).getCell(2);
           c1.value = format.name;
-          c2.value = format.unitPrice ? `${format.unitPrice}р` : '';
+          c2.value = format.unitPrice ? priceOnly(format.unitPrice) : '';
           applyTextStyle(c1);
           applyTextStyle(c2);
           row++;
@@ -298,7 +305,7 @@ export async function generateStockTable(
     for (const brand of dispBrands) {
       for (const format of input.formats.filter((f) => f.brandId === brand.id)) {
         const flavors = input.flavors.filter((f) => f.productFormatId === format.id);
-        const priceStr = format.unitPrice ? ` - ${format.unitPrice}р` : '';
+        const priceStr = priceInline(format.unitPrice);
         const formatCell = ws.getRow(row).getCell(1);
         formatCell.value = `${brand.name} ${format.name}${priceStr}`.trim();
         applyBrandStyle(formatCell);

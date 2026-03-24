@@ -7,6 +7,7 @@ import {
   ProductFormatEntity,
   FlavorEntity,
   StockItemEntity,
+  ShopEntity,
 } from '@/lib/db/entities';
 import { generateStockTable } from '@/lib/excel/table-generator';
 import path from 'path';
@@ -50,11 +51,16 @@ export async function POST(request: NextRequest) {
     ]);
   });
 
+  const shop = await ds.getRepository(ShopEntity).findOne({
+    where: { id: session.shopId },
+  });
+
   const outputPath = path.join(os.tmpdir(), `stock-table-${session.shopId}-${Date.now()}.xlsx`);
 
   try {
     await generateStockTable(
       {
+        currencyCode: shop?.currency ?? 'BYN',
         categories: categories.map((c) => ({ id: c.id, name: c.name, emoji: c.emoji || '' })),
         brands: brands.map((b) => ({
           id: b.id,

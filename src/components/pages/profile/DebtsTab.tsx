@@ -6,7 +6,7 @@ import { ChevronRight, DollarSign, ArrowDownRight, ArrowUpRight, Plus } from 'lu
 import { SaleFormModal } from '@/components/sales/SaleFormModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { useHintSeen } from '@/hooks/use-hint-seen';
 import {
   Dialog,
@@ -228,7 +228,7 @@ export function DebtsTab() {
             <div className="flex gap-2">
               <input
                 type="number"
-                placeholder={`Сумма (${shopData?.currency || 'BYN'})`}
+                placeholder={`Сумма (${getCurrencySymbol(shopData?.currency)})`}
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 className="flex-1 h-10 px-4 rounded-xl bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm font-mono-nums"

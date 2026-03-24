@@ -1,5 +1,6 @@
 import { parseTemplate, TemplateNode } from './template-parser';
 import { PostFormatConfig } from '@/lib/db/entities/PostFormat';
+import { getCurrencySymbol } from '@/lib/currency';
 
 export interface CategoryData {
   id: string;
@@ -37,6 +38,8 @@ export interface ShopData {
 export interface PostData {
   categories: CategoryData[];
   shop?: ShopData;
+  /** ISO код валюты магазина (BYN, USD, RUB, …) */
+  currencyCode?: string;
 }
 
 export interface FormatConfig extends PostFormatConfig {
@@ -105,10 +108,20 @@ function resolveVariable(
 ): string {
   // Check context first (for loop variables)
   if (context[name] && path) {
-    return getNestedValue(context[name], path) || '';
+    const v = getNestedValue(context[name], path);
+    if (v === null || v === undefined) return '';
+    return String(v);
   }
   if (context[name] && !path) {
-    return String(context[name] || '');
+    return String(context[name] ?? '');
+  }
+
+  const currencyCode = data.currencyCode ?? 'BYN';
+  if (name === 'currency' && !path) {
+    return getCurrencySymbol(currencyCode);
+  }
+  if (name === 'currencyCode' && !path) {
+    return currencyCode;
   }
 
   // Special variables
@@ -151,7 +164,9 @@ function renderContent(data: PostData, config: FormatConfig): string {
         if (format.strength) {
           headerParts.push(format.strength);
         }
-        const priceStr = config.showPrices !== false ? ` (${format.price} BYN)` : '';
+        const sym = getCurrencySymbol(data.currencyCode ?? 'BYN');
+        const priceStr =
+          config.showPrices !== false ? ` (${format.price} ${sym})` : '';
         const header = `${brand.emojiPrefix}${headerParts.join(' ')}${brand.emojiPrefix}:${priceStr}`;
         lines.push(header);
 
