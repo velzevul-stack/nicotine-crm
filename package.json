@@ -9,6 +9,7 @@
     "dev": "node server.js",
     "dev:http": "next dev",
     "build": "next build --webpack",
+    "clean:next": "node scripts/clean-next-cache.mjs",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "typeorm-ts-node-commonjs migration:generate -d src/lib/db/data-source.ts",

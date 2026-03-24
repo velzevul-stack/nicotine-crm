@@ -156,18 +156,20 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
         const maxPreviewW = Math.min(360, vw - 32);
 
         const config = {
-          fps: 6,
+          // Выше fps — чаще попытка декода по кадру (лучше для линейных EAN/Code128)
+          fps: 10,
+          // Выше и шире «окно» — тонкие 1D-коды чаще целиком попадают в кроп
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const w = Math.min(maxPreviewW, Math.floor(viewfinderWidth * 0.94));
-            const h = Math.min(180, Math.max(120, Math.floor(viewfinderHeight * 0.38)));
+            const w = Math.min(maxPreviewW, Math.floor(viewfinderWidth * 0.96));
+            const h = Math.min(260, Math.max(140, Math.floor(viewfinderHeight * 0.52)));
             return { width: w, height: h };
           },
           aspectRatio: 1.25,
           // Без max/advanced: на части Android OverconstrainedError → второй вызов start() и повторный запрос камеры
           videoConstraints: {
             facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
           },
         };
 
