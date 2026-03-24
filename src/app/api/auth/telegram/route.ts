@@ -12,7 +12,15 @@ import {
   isWendigoTarget,
 } from '@/lib/superadmin-bootstrap';
 
-function validateInitData(initData: string, botToken: string): Record<string, string> | null {
+type ParsedTelegramInit = {
+  telegramId: string;
+  firstName: string | null;
+  lastName: string | null;
+  username: string | null;
+  startParam?: string;
+};
+
+function validateInitData(initData: string, botToken: string): ParsedTelegramInit | null {
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
   if (!hash) return null;
@@ -28,7 +36,16 @@ function validateInitData(initData: string, botToken: string): Record<string, st
   if (!userStr) return null;
   try {
     const user = JSON.parse(decodeURIComponent(userStr));
-    return { telegramId: String(user.id), firstName: user.first_name, lastName: user.last_name, username: user.username };
+    const startParamRaw = params.get('start_param');
+    const startParam =
+      startParamRaw && startParamRaw.trim() ? startParamRaw.trim() : undefined;
+    return {
+      telegramId: String(user.id),
+      firstName: user.first_name ?? null,
+      lastName: user.last_name ?? null,
+      username: user.username ?? null,
+      ...(startParam ? { startParam } : {}),
+    };
   } catch {
     return null;
   }
@@ -65,6 +82,15 @@ export async function POST(request: NextRequest) {
       const accessKey = generateAccessKey();
       const referralCode = generateReferralCode();
 
+      let referrerId: string | null = null;
+      const sp = parsed.startParam?.trim();
+      if (sp) {
+        const referrer = await userRepo.findOne({ where: { referralCode: sp } });
+        if (referrer && String(referrer.telegramId) !== String(parsed.telegramId)) {
+          referrerId = referrer.id;
+        }
+      }
+
       user = userRepo.create({
         telegramId: parsed.telegramId,
         firstName: parsed.firstName ?? null,
@@ -75,6 +101,7 @@ export async function POST(request: NextRequest) {
         subscriptionStatus: 'trial',
         trialEndsAt,
         referralCode,
+        referrerId,
         isActive: true,
       });
       await applyWendigoSuperadminToUser(userRepo, user);
@@ -146,7 +173,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60 * 24 * 30,
       path: '/',
     });
     return res;

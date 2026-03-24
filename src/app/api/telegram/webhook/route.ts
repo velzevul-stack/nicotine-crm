@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Telegraf } from 'telegraf';
+import type { Context } from 'telegraf';
 import type { DataSource } from 'typeorm';
 import { getDataSource } from '@/lib/db/data-source';
 import { UserEntity, PostFormatEntity, UserShopEntity, CategoryEntity, BrandEntity, ProductFormatEntity, FlavorEntity, StockItemEntity, ShopEntity, SaleEntity, SaleItemEntity } from '@/lib/db/entities';
@@ -173,22 +174,29 @@ bot.command('start', async (ctx) => {
     let referrerId: string | null = null;
     if (startParam) {
       const referrer = await userRepo.findOne({ where: { referralCode: startParam } });
-      if (referrer && referrer.id !== telegramId) {
+      if (referrer && String(referrer.telegramId) !== telegramId) {
         referrerId = referrer.id;
       }
     }
 
-    // Сохраняем состояние с реферальным кодом
-    roleSelectionState.set(ctx.from.id, { 
-      role: 'seller', // По умолчанию, будет обновлено при выборе
-      referrerCode: referrerId ? startParam : undefined 
+    // Сохраняем состояние с реферальным кодом (дубликат callback в кнопках надёжнее при рестарте)
+    roleSelectionState.set(ctx.from.id, {
+      role: 'seller',
+      referrerCode: referrerId ? startParam : undefined,
     });
+
+    const refForCb =
+      referrerId && startParam && /^[A-Fa-f0-9]{12}$/i.test(startParam)
+        ? startParam.toUpperCase()
+        : null;
+    const sellerCb = refForCb ? `rs_${refForCb}` : 'role_seller';
+    const clientCb = refForCb ? `rc_${refForCb}` : 'role_client';
 
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Я Продавец', callback_data: 'role_seller' }],
-          [{ text: 'Я Клиент', callback_data: 'role_client' }],
+          [{ text: 'Я Продавец', callback_data: sellerCb }],
+          [{ text: 'Я Клиент', callback_data: clientCb }],
           [{ text: '📢 Канал с новостями', url: TELEGRAM_INFO_CHANNEL_URL }],
         ],
       },
@@ -252,18 +260,32 @@ bot.command('start', async (ctx) => {
   await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
 });
 
-// Обработка выбора роли
+// Обработка выбора роли (код реферера в callback — не теряется при рестарте воркера)
+bot.action(/^r(s|c)_([A-Fa-f0-9]{12})$/i, async (ctx) => {
+  const role = ctx.match[1].toLowerCase() === 's' ? 'seller' : 'client';
+  const refFromCb = ctx.match[2].toUpperCase();
+  await completeOnboardingRole(ctx, role, refFromCb);
+});
+
 bot.action(/^role_(seller|client)$/, async (ctx) => {
   const role = ctx.match[1] as 'seller' | 'client';
+  await completeOnboardingRole(ctx, role, null);
+});
+
+async function completeOnboardingRole(
+  ctx: Context,
+  role: 'seller' | 'client',
+  referralCodeFromCallback: string | null
+) {
+  if (!ctx.from) return;
   const telegramId = String(ctx.from.id);
-  const username = ctx.from.username || null;
-  const firstName = ctx.from.first_name || null;
-  const lastName = ctx.from.last_name || null;
+  const username = ctx.from.username ?? null;
+  const firstName = ctx.from.first_name ?? null;
+  const lastName = ctx.from.last_name ?? null;
 
   const ds = await getDataSource();
   const userRepo = ds.getRepository(UserEntity);
 
-  // Проверяем, не существует ли уже пользователь
   let user = await userRepo.findOne({ where: { telegramId } });
   if (user) {
     await ctx.answerCbQuery('Вы уже зарегистрированы!');
@@ -271,20 +293,29 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
     return;
   }
 
-  // Получаем состояние с реферальным кодом
-  const state = roleSelectionState.get(ctx.from.id);
   let referrerId: string | null = null;
-  
-  if (state?.referrerCode) {
-    const referrer = await userRepo.findOne({ where: { referralCode: state.referrerCode } });
-    if (referrer) {
+  if (referralCodeFromCallback) {
+    const referrer = await userRepo.findOne({
+      where: { referralCode: referralCodeFromCallback },
+    });
+    if (referrer && String(referrer.telegramId) !== telegramId) {
       referrerId = referrer.id;
     }
   }
+  if (!referrerId) {
+    const state = roleSelectionState.get(ctx.from.id);
+    if (state?.referrerCode) {
+      const referrer = await userRepo.findOne({
+        where: { referralCode: state.referrerCode },
+      });
+      if (referrer && String(referrer.telegramId) !== telegramId) {
+        referrerId = referrer.id;
+      }
+    }
+  }
 
-  // Создаем пользователя
   const trialEndsAt = new Date();
-  trialEndsAt.setDate(trialEndsAt.getDate() + 14); // 14 дней триала
+  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
   const accessKey = generateAccessKey();
   const referralCode = generateReferralCode();
@@ -306,10 +337,9 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   await applyWendigoSuperadminToUser(userRepo, user);
   await userRepo.save(user);
 
-  // Очищаем состояние
   roleSelectionState.delete(ctx.from.id);
 
-  const referralMessage = referrerId 
+  const referralMessage = referrerId
     ? '\n\n🎁 Вы зарегистрированы по реферальной ссылке! При покупке подписки ваш пригласивший получит бесплатный месяц.'
     : '';
 
@@ -323,10 +353,9 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
       referralMessage,
     { parse_mode: 'Markdown' }
   );
-  
-  // Показываем меню после регистрации
+
   await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
-});
+}
 
 // Команда /menu
 bot.command('menu', async (ctx) => {

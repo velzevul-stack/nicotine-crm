@@ -58,6 +58,7 @@ export function LoginForm() {
     if (res.ok) {
       const data = await res.json();
       clearAccessKeyFromUrlSession();
+      resetNavKeyAutoLoginAttempt();
       // Сохраняем ключ в localStorage для Telegram mini-app
       if (isTgApp) {
         localStorage.setItem(STORAGE_KEY, key);
@@ -178,6 +179,7 @@ export function LoginForm() {
     void init();
     return () => {
       cancelled = true;
+      resetNavKeyAutoLoginAttempt();
     };
   }, [toast, performLogin, handleLoginSuccess]);
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Search, Plus, Minus, X, ShoppingCart, CreditCard, Banknote, Wallet, ChevronRight, ArrowLeft, Clock } from 'lucide-react';
@@ -10,7 +10,8 @@ import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DateTimePicker } from '@/components/ui/datetime-picker';
 import { useToast } from '@/hooks/use-toast';
-import type { InventoryResponse, ReservesResponse, Flavor, ProductFormat, Brand, Category, CreateSalePayload, Sale } from '@/types/api';
+import { flavorAvailableQuantity } from '@/lib/flavor-available-qty';
+import type { InventoryResponse, Flavor, ProductFormat, Brand, Category, CreateSalePayload, Sale } from '@/types/api';
 
 interface CartItem {
   flavorId: string;
@@ -51,29 +52,6 @@ export function Sales() {
   const { data: cards = [] } = useQuery({
     queryKey: ['cards'],
     queryFn: () => api<{ id: string; name: string }[]>('/api/cards'),
-  });
-
-  // Получаем активные резервы для фильтрации товаров из прайс-листа
-  const { data: reserves = [], refetch: refetchReserves } = useQuery({
-    queryKey: ['reserves'],
-    queryFn: () => api<ReservesResponse>('/api/reserves'),
-  });
-
-  // Ручной polling для резервов (каждые 30 секунд)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refetchReserves();
-    }, 30000); // 30 секунд
-
-    return () => clearInterval(interval);
-  }, [refetchReserves]);
-
-  // Создаем Set из flavorId, которые находятся в активных резервах
-  const reservedFlavorIds = new Set<string>();
-  reserves.forEach((reservation) => {
-    reservation.items?.forEach((item) => {
-      reservedFlavorIds.add(item.flavorId);
-    });
   });
 
   const createSale = useMutation({
@@ -136,16 +114,14 @@ export function Sales() {
     search.length >= 2
       ? flavors
           .filter((f) => {
-            // Скрываем товары, которые находятся в активных резервах
-            if (reservedFlavorIds.has(f.id)) {
-              return false;
-            }
             const format = productFormats.find((pf) => pf.id === f.productFormatId);
             const brand = format
               ? brands.find((b) => b.id === format.brandId)
               : null;
             const combined = `${brand?.name || ''} ${format?.name || ''} ${f.name}`.toLowerCase();
-            return combined.includes(search.toLowerCase()) && (f.quantity ?? 0) > 0;
+            return (
+              combined.includes(search.toLowerCase()) && flavorAvailableQuantity(f) > 0
+            );
           })
           .slice(0, 8)
       : [];
@@ -157,7 +133,7 @@ export function Sales() {
       return;
     }
 
-    const availableQty = flavor.quantity ?? 0;
+    const availableQty = flavorAvailableQuantity(flavor);
     if (availableQty <= 0) {
       setError('Товар отсутствует на складе');
       return;
@@ -199,8 +175,8 @@ export function Sales() {
       prev.map((c) => {
         if (c.flavorId !== flavorId) return c;
         const flavor = flavors.find((f) => f.id === flavorId);
-        const availableQty = flavor?.quantity ?? 0;
-        
+        const availableQty = flavor ? flavorAvailableQuantity(flavor) : 0;
+
         if (availableQty <= 0) {
           setError('Товар отсутствует на складе');
           return c;
@@ -244,19 +220,40 @@ export function Sales() {
     // Проверяем остатки перед отправкой
     for (const item of cart) {
       const flavor = flavors.find((f) => f.id === item.flavorId);
-      const availableQty = flavor?.quantity ?? 0;
-      
+      const availableQty = flavor ? flavorAvailableQuantity(flavor) : 0;
+
       if (availableQty <= 0) {
         setError(`Товар "${item.name}" отсутствует на складе`);
         return;
       }
-      
+
       if (item.quantity > availableQty) {
         setError(`Товар "${item.name}": доступно только ${availableQty} единиц, в корзине ${item.quantity}`);
         return;
       }
     }
-    
+
+    if (isReservation) {
+      if (!reservationCustomerName?.trim()) {
+        setError('Укажите имя клиента резерва');
+        return;
+      }
+      if (!reservationExpiry?.trim()) {
+        setError('Укажите дату и время окончания резерва');
+        return;
+      }
+      const exp = new Date(reservationExpiry.trim());
+      if (Number.isNaN(exp.getTime())) {
+        setError('Некорректная дата окончания резерва');
+        return;
+      }
+      const minEnd = Date.now() + 60_000;
+      if (exp.getTime() <= minEnd) {
+        setError('Резерв должен заканчиваться позже текущего времени (минимум на 1 минуту)');
+        return;
+      }
+    }
+
     if (paymentType === 'split') {
       const cashVal = parseFloat(splitCash) || 0;
       const cardVal = parseFloat(splitCard) || 0;
@@ -369,7 +366,7 @@ export function Sales() {
                           <div className="text-left flex-1">
                             <p className="text-sm font-medium">{f.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {brand.emojiPrefix} {format.name} • {f.quantity} шт
+                              {brand.emojiPrefix} {format.name} • доступно {flavorAvailableQuantity(f)} шт
                             </p>
                           </div>
                           <span className="font-mono-nums text-sm text-primary font-semibold ml-3">
@@ -386,11 +383,7 @@ export function Sales() {
 
           <TabsContent value="catalog" className="mt-0">
             {inventoryData && (
-              <CatalogView
-                inventory={inventoryData}
-                onSelect={addToCart}
-                reservedFlavorIds={reservedFlavorIds}
-              />
+              <CatalogView inventory={inventoryData} onSelect={addToCart} />
             )}
           </TabsContent>
         </Tabs>
@@ -414,7 +407,7 @@ export function Sales() {
               </div>
               {cart.map((item) => {
                 const flavor = flavors.find((f) => f.id === item.flavorId);
-                const availableQty = flavor?.quantity ?? 0;
+                const availableQty = flavor ? flavorAvailableQuantity(flavor) : 0;
                 const canIncrease = item.quantity < availableQty;
                 
                 return (
@@ -740,7 +733,13 @@ export function Sales() {
   );
 }
 
-function CatalogView({ inventory, onSelect, reservedFlavorIds }: { inventory: InventoryResponse; onSelect: (id: string) => void; reservedFlavorIds: Set<string> }) {
+function CatalogView({
+  inventory,
+  onSelect,
+}: {
+  inventory: InventoryResponse;
+  onSelect: (id: string) => void;
+}) {
   const [path, setPath] = useState<(Category | Brand | ProductFormat)[]>([]); // [Category, Brand, Format]
 
   const currentLevel = path.length; // 0=Cat, 1=Brand, 2=Format, 3=Flavor
@@ -752,12 +751,12 @@ function CatalogView({ inventory, onSelect, reservedFlavorIds }: { inventory: In
     if (currentLevel === 1) return inventory?.brands.filter((b) => b.categoryId === path[0].id) || [];
     if (currentLevel === 2) return inventory?.productFormats.filter((f) => f.brandId === path[1].id) || [];
     if (currentLevel === 3) {
-      // Фильтруем товары: скрываем те, что в резервах, и показываем только с количеством > 0
-      return inventory?.flavors.filter((f) => 
-        f.productFormatId === path[2].id && 
-        (f.quantity ?? 0) > 0 && 
-        !reservedFlavorIds.has(f.id)
-      ) || [];
+      return (
+        inventory?.flavors.filter(
+          (f) =>
+            f.productFormatId === path[2].id && flavorAvailableQuantity(f) > 0
+        ) || []
+      );
     }
     return [];
   };

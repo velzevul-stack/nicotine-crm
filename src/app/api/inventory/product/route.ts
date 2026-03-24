@@ -47,6 +47,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const PRICE_EPS = 0.005;
+  if (parsed.data.costPrice > parsed.data.unitPrice + PRICE_EPS) {
+    return NextResponse.json(
+      { message: 'Себестоимость не может быть больше розничной цены' },
+      { status: 400 }
+    );
+  }
+
   const {
     barcode,
     categoryId,

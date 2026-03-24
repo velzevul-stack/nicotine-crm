@@ -22,6 +22,9 @@ const itemSchema = z.object({
   lineTotal: z.number(),
 });
 
+/** Минимум на сколько мс вперёд должен заканчиваться резерв (синхронно с клиентом). */
+const RESERVATION_MIN_LEAD_MS = 60_000;
+
 const createSchema = z.object({
   paymentType: z.enum(['cash', 'card', 'split', 'debt']),
   cashAmount: z.number().min(0).optional(),
@@ -119,9 +122,35 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (isReservation) {
+    if (!reservationExpiry) {
+      return NextResponse.json(
+        { message: 'Укажите дату и время окончания резерва' },
+        { status: 400 }
+      );
+    }
+    const exp = new Date(reservationExpiry);
+    if (Number.isNaN(exp.getTime())) {
+      return NextResponse.json(
+        { message: 'Некорректная дата окончания резерва' },
+        { status: 400 }
+      );
+    }
+    if (exp.getTime() <= Date.now() + RESERVATION_MIN_LEAD_MS) {
+      return NextResponse.json(
+        {
+          message:
+            'Резерв должен заканчиваться позже текущего времени (минимум на 1 минуту)',
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const ds = await getDataSource();
 
-  return ds.transaction(async (em) => {
+  try {
+    const result = await ds.transaction(async (em) => {
     // Validate stock and flavor ownership
     for (const it of items) {
       // Проверяем, что flavor принадлежит правильному магазину
@@ -246,12 +275,23 @@ export async function POST(request: NextRequest) {
       await em.getRepository(DebtOperationEntity).save(op);
     }
 
-    return NextResponse.json({
+    return {
       id: sale.id,
       finalAmount,
       datetime: sale.datetime,
-    });
+    };
   });
+    return NextResponse.json(result);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Ошибка при оформлении продажи';
+    const clientError =
+      message.includes('Недостаточно') || message.includes('не найден');
+    return NextResponse.json(
+      { message },
+      { status: clientError ? 400 : 500 }
+    );
+  }
 }
 
 export async function GET(request: NextRequest) {

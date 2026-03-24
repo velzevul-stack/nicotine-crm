@@ -730,16 +730,15 @@ bot.command('start', async (ctx) => {
     let referrerId: string | null = null;
     if (startParam) {
       const referrer = await userRepo.findOne({ where: { referralCode: startParam } });
-      if (referrer && referrer.id !== telegramId) {
+      if (referrer && String(referrer.telegramId) !== telegramId) {
         referrerId = referrer.id;
         console.log('[Bot] Referral code found:', startParam);
       }
     }
 
-    // Сохраняем состояние с реферальным кодом
-    roleSelectionState.set(ctx.from.id, { 
-      role: 'seller', // По умолчанию, будет обновлено при выборе
-      referrerCode: referrerId ? startParam : undefined 
+    roleSelectionState.set(ctx.from.id, {
+      role: 'seller',
+      referrerCode: referrerId ? startParam : undefined,
     });
 
     const referralMessage = referrerId 
@@ -757,7 +756,7 @@ bot.command('start', async (ctx) => {
 
 *Роль можно сменить в любой момент в профиле*${infoChannelMessageFooter()}`;
 
-    const keyboard = getOnboardingKeyboard();
+    const keyboard = getOnboardingKeyboard(referrerId ? startParam : null);
     console.log('[Bot] Sending welcome message with keyboard:', JSON.stringify(keyboard, null, 2));
     
     try {
@@ -903,10 +902,13 @@ bot.command('updatekeyboard', async (ctx) => {
   await ctx.reply('📱 Обновляю клавиатуру...', { reply_markup });
 });
 
-// Обработка выбора роли (обновлено для использования новых модулей)
-bot.action(/^role_(seller|client)$/, async (ctx) => {
-  const role = ctx.match[1] as 'seller' | 'client';
-  console.log('[Bot] Callback: role_', role, 'from user:', ctx.from.id);
+async function completeOnboardingRolePolling(
+  ctx: Context,
+  role: 'seller' | 'client',
+  referralCodeFromCallback: string | null
+) {
+  if (!ctx.from) return;
+  console.log('[Bot] Onboarding role:', role, 'refCb:', referralCodeFromCallback, 'user:', ctx.from.id);
   const telegramId = String(ctx.from.id);
   const username = ctx.from.username || null;
   const firstName = ctx.from.first_name || null;
@@ -915,29 +917,36 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   const ds = await getDataSource();
   const userRepo = ds.getRepository(UserEntity);
 
-  // Проверяем, не существует ли уже пользователь
   let user = await userRepo.findOne({ where: { telegramId } });
   if (user) {
-    console.log('[Bot] User already exists, cannot change role via onboarding');
     await ctx.answerCbQuery('Вы уже зарегистрированы!');
     await ctx.editMessageText('Вы уже зарегистрированы в системе. Используйте /role для смены роли.');
     return;
   }
 
-  // Получаем состояние с реферальным кодом
-  const state = roleSelectionState.get(ctx.from.id);
   let referrerId: string | null = null;
-  
-  if (state?.referrerCode) {
-    const referrer = await userRepo.findOne({ where: { referralCode: state.referrerCode } });
-    if (referrer) {
+  if (referralCodeFromCallback) {
+    const referrer = await userRepo.findOne({
+      where: { referralCode: referralCodeFromCallback },
+    });
+    if (referrer && String(referrer.telegramId) !== telegramId) {
       referrerId = referrer.id;
     }
   }
+  if (!referrerId) {
+    const state = roleSelectionState.get(ctx.from.id);
+    if (state?.referrerCode) {
+      const referrer = await userRepo.findOne({
+        where: { referralCode: state.referrerCode },
+      });
+      if (referrer && String(referrer.telegramId) !== telegramId) {
+        referrerId = referrer.id;
+      }
+    }
+  }
 
-  // Создаем пользователя
   const trialEndsAt = new Date();
-  trialEndsAt.setDate(trialEndsAt.getDate() + 14); // 14 дней триала
+  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
 
   const accessKey = generateAccessKey();
   const referralCode = generateReferralCode();
@@ -959,10 +968,9 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   await applyWendigoSuperadminToUser(userRepo, user);
   await userRepo.save(user);
 
-  // Очищаем состояние
   roleSelectionState.delete(ctx.from.id);
 
-  const referralMessage = referrerId 
+  const referralMessage = referrerId
     ? '\n\n🎁 Вы зарегистрированы по реферальной ссылке! При покупке подписки ваш пригласивший получит бесплатный месяц.'
     : '';
 
@@ -976,9 +984,17 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
       referralMessage,
     { parse_mode: 'Markdown' }
   );
-  
-  // Показываем меню после регистрации с учетом роли
+
   await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
+}
+
+bot.action(/^r(s|c)_([A-Fa-f0-9]{12})$/i, async (ctx) => {
+  const role = ctx.match[1].toLowerCase() === 's' ? 'seller' : 'client';
+  await completeOnboardingRolePolling(ctx, role, ctx.match[2].toUpperCase());
+});
+
+bot.action(/^role_(seller|client)$/, async (ctx) => {
+  await completeOnboardingRolePolling(ctx, ctx.match[1] as 'seller' | 'client', null);
 });
 
 // Функция для обновления клавиатуры пользователя

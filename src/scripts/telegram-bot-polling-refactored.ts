@@ -381,9 +381,12 @@ bot.command('menu', async (ctx) => {
   await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
 });
 
-// Обработка выбора роли (обновлено для использования новых модулей)
-bot.action(/^role_(seller|client)$/, async (ctx) => {
-  const role = ctx.match[1] as 'seller' | 'client';
+async function completeOnboardingRoleRefactored(
+  ctx: Context,
+  role: 'seller' | 'client',
+  referralCodeFromCallback: string | null
+) {
+  if (!ctx.from) return;
   const telegramId = String(ctx.from.id);
   const username = ctx.from.username || null;
   const firstName = ctx.from.first_name || null;
@@ -392,7 +395,6 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   const ds = await getDataSource();
   const userRepo = ds.getRepository(UserEntity);
 
-  // Проверяем, не существует ли уже пользователь
   let user = await userRepo.findOne({ where: { telegramId } });
   if (user) {
     await ctx.answerCbQuery('Вы уже зарегистрированы!');
@@ -400,20 +402,29 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
     return;
   }
 
-  // Получаем состояние с реферальным кодом
-  const state = roleSelectionState.get(ctx.from.id);
   let referrerId: string | null = null;
-  
-  if (state?.referrerCode) {
-    const referrer = await userRepo.findOne({ where: { referralCode: state.referrerCode } });
-    if (referrer) {
+  if (referralCodeFromCallback) {
+    const referrer = await userRepo.findOne({
+      where: { referralCode: referralCodeFromCallback },
+    });
+    if (referrer && String(referrer.telegramId) !== telegramId) {
       referrerId = referrer.id;
     }
   }
+  if (!referrerId) {
+    const state = roleSelectionState.get(ctx.from.id);
+    if (state?.referrerCode) {
+      const referrer = await userRepo.findOne({
+        where: { referralCode: state.referrerCode },
+      });
+      if (referrer && String(referrer.telegramId) !== telegramId) {
+        referrerId = referrer.id;
+      }
+    }
+  }
 
-  // Создаем пользователя
   const trialEndsAt = new Date();
-  trialEndsAt.setDate(trialEndsAt.getDate() + 7); // 7 дней триала
+  trialEndsAt.setDate(trialEndsAt.getDate() + 7);
 
   const accessKey = generateAccessKey();
   const referralCode = generateReferralCode();
@@ -435,10 +446,9 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
   await applyWendigoSuperadminToUser(userRepo, user);
   await userRepo.save(user);
 
-  // Очищаем состояние
   roleSelectionState.delete(ctx.from.id);
 
-  const referralMessage = referrerId 
+  const referralMessage = referrerId
     ? '\n\n🎁 Вы зарегистрированы по реферальной ссылке! При покупке подписки ваш пригласивший получит бесплатный месяц.'
     : '';
 
@@ -452,9 +462,17 @@ bot.action(/^role_(seller|client)$/, async (ctx) => {
       referralMessage,
     { parse_mode: 'Markdown' }
   );
-  
-  // Показываем меню после регистрации
+
   await ctx.reply('📱 Главное меню:', { reply_markup: await mainMenuKeyboardForUser(ds, user) });
+}
+
+bot.action(/^r(s|c)_([A-Fa-f0-9]{12})$/i, async (ctx) => {
+  const role = ctx.match[1].toLowerCase() === 's' ? 'seller' : 'client';
+  await completeOnboardingRoleRefactored(ctx, role, ctx.match[2].toUpperCase());
+});
+
+bot.action(/^role_(seller|client)$/, async (ctx) => {
+  await completeOnboardingRoleRefactored(ctx, ctx.match[1] as 'seller' | 'client', null);
 });
 
 // Команда /key

@@ -182,9 +182,6 @@ export function Inventory() {
     return acc;
   }, {});
 
-  // Get unique formats from the filtered items
-  const uniqueFormats = [...new Map(items.map((t) => [t.format.id, t.format])).values()];
-
   const handleScan = (code: string) => {
     if (scanMode === 'receive') {
       // This mode is now handled inside ReceiveModal, but if triggered from main screen:
@@ -321,7 +318,7 @@ export function Inventory() {
             </div>
           ) : (
             categories.map((cat: any) => {
-              const catFormats = uniqueFormats
+              const catFormats = productFormats
                 .filter((f: any) => brands.find((b: any) => b.id === f.brandId)?.categoryId === cat.id)
                 .sort((a: any, b: any) => {
                   const brandA = brands.find((br: any) => br.id === a.brandId);
@@ -409,7 +406,12 @@ export function Inventory() {
                             className="overflow-hidden bg-background"
                           >
                             <div className="px-5 py-3 space-y-3">
-                              {formatItems.map((t) => (
+                              {formatItems.length === 0 ? (
+                                <p className="text-sm text-muted-foreground py-2">
+                                  Нет вкусов или нет строк по текущим фильтрам. Отредактируйте бренд кнопкой справа или примите товар.
+                                </p>
+                              ) : (
+                              formatItems.map((t) => (
                                 <div
                                   key={t.flavor.id}
                                   className="border-b border-border/30 last:border-0 pb-3 last:pb-0"
@@ -488,7 +490,8 @@ export function Inventory() {
                                     </div>
                                   </div>
                                 </div>
-                              ))}
+                              ))
+                              )}
                             </div>
                           </motion.div>
                         )}

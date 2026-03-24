@@ -29,7 +29,7 @@ export async function handleStart(ctx: Context, dataSource: DataSource) {
     let referrerId: string | null = null;
     if (startParam) {
       const referrer = await userRepo.findOne({ where: { referralCode: startParam } });
-      if (referrer && referrer.id !== telegramId) {
+      if (referrer && String(referrer.telegramId) !== telegramId) {
         referrerId = referrer.id;
       }
     }
@@ -56,7 +56,7 @@ export async function handleStart(ctx: Context, dataSource: DataSource) {
 
     await ctx.reply(welcomeText, {
       parse_mode: 'Markdown',
-      ...getOnboardingKeyboard(),
+      ...getOnboardingKeyboard(referrerId ? startParam : null),
     });
 
     // Реферальный код будет сохранен в главном файле через roleSelectionState

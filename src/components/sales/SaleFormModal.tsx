@@ -23,9 +23,9 @@ import { api } from '@/lib/api-client';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from '@/hooks/use-toast';
 import { DateTimePicker } from '@/components/ui/datetime-picker';
+import { flavorAvailableQuantity } from '@/lib/flavor-available-qty';
 import type {
   InventoryResponse,
-  ReservesResponse,
   Flavor,
   ProductFormat,
   Brand,
@@ -53,11 +53,9 @@ interface SaleFormModalProps {
 function CatalogView({
   inventory,
   onSelect,
-  reservedFlavorIds,
 }: {
   inventory: InventoryResponse;
   onSelect: (id: string) => void;
-  reservedFlavorIds: Set<string>;
 }) {
   const [path, setPath] = useState<(Category | Brand | ProductFormat)[]>([]);
 
@@ -77,8 +75,7 @@ function CatalogView({
         inventory?.flavors.filter(
           (f) =>
             f.productFormatId === path[2].id &&
-            (f.quantity ?? 0) > 0 &&
-            !reservedFlavorIds.has(f.id)
+            flavorAvailableQuantity(f) > 0
         ) || []
       );
     }
@@ -168,17 +165,6 @@ export function SaleFormModal({
     queryFn: () => api<InventoryResponse>('/api/inventory'),
     enabled: open,
   });
-  const { data: reserves = [] } = useQuery({
-    queryKey: ['reserves'],
-    queryFn: () => api<ReservesResponse>('/api/reserves'),
-    enabled: open,
-  });
-
-  const reservedFlavorIds = new Set<string>();
-  reserves.forEach((r) => {
-    r.items?.forEach((item) => reservedFlavorIds.add(item.flavorId));
-  });
-
   const flavors = Array.isArray(inventoryData?.flavors) ? inventoryData.flavors : [];
   const productFormats =
     Array.isArray(inventoryData?.productFormats) ? inventoryData.productFormats : [];
@@ -188,18 +174,20 @@ export function SaleFormModal({
     search.length >= 2
       ? flavors
           .filter((f) => {
-            if (reservedFlavorIds.has(f.id)) return false;
             const format = productFormats.find((pf) => pf.id === f.productFormatId);
             const brand = format ? brands.find((b) => b.id === format.brandId) : null;
             const combined = `${brand?.name || ''} ${format?.name || ''} ${f.name}`.toLowerCase();
-            return combined.includes(search.toLowerCase()) && (f.quantity ?? 0) > 0;
+            return (
+              combined.includes(search.toLowerCase()) && flavorAvailableQuantity(f) > 0
+            );
           })
           .slice(0, 8)
       : [];
 
   const addToCart = (flavorId: string) => {
     const flavor = flavors.find((f) => f.id === flavorId);
-    if (!flavor || (flavor.quantity ?? 0) <= 0) {
+    const avail = flavor ? flavorAvailableQuantity(flavor) : 0;
+    if (!flavor || avail <= 0) {
       setError('Товар недоступен');
       return;
     }
@@ -208,8 +196,8 @@ export function SaleFormModal({
     const brand = brands.find((b) => b.id === format.brandId)!;
 
     if (existing) {
-      if (existing.quantity + 1 > (flavor.quantity ?? 0)) {
-        setError(`Доступно только ${flavor.quantity}`);
+      if (existing.quantity + 1 > avail) {
+        setError(`Доступно только ${avail}`);
         return;
       }
       setCart(
@@ -238,7 +226,7 @@ export function SaleFormModal({
       prev.map((c) => {
         if (c.flavorId !== flavorId) return c;
         const flavor = flavors.find((f) => f.id === flavorId);
-        const availableQty = flavor?.quantity ?? 0;
+        const availableQty = flavor ? flavorAvailableQuantity(flavor) : 0;
         const newQty = Math.max(1, Math.min(c.quantity + delta, availableQty));
         return { ...c, quantity: newQty };
       })
@@ -302,11 +290,26 @@ export function SaleFormModal({
       setError(mode === 'debt' ? 'Укажите имя клиента' : 'Укажите имя клиента резерва');
       return;
     }
-    // reservationExpiry опционален для резерва
+
+    if (mode === 'reserve') {
+      if (!reservationExpiry?.trim()) {
+        setError('Укажите дату и время окончания резерва');
+        return;
+      }
+      const exp = new Date(reservationExpiry.trim());
+      if (Number.isNaN(exp.getTime())) {
+        setError('Некорректная дата окончания резерва');
+        return;
+      }
+      if (exp.getTime() <= Date.now() + 60_000) {
+        setError('Резерв должен заканчиваться позже текущего времени (минимум на 1 минуту)');
+        return;
+      }
+    }
 
     for (const item of cart) {
       const flavor = flavors.find((f) => f.id === item.flavorId);
-      const availableQty = flavor?.quantity ?? 0;
+      const availableQty = flavor ? flavorAvailableQuantity(flavor) : 0;
       if (item.quantity > availableQty) {
         setError(`Товар "${item.name}": доступно ${availableQty}`);
         return;
@@ -414,11 +417,7 @@ export function SaleFormModal({
 
           {/* Catalog */}
           {inventoryData && (
-            <CatalogView
-              inventory={inventoryData}
-              onSelect={addToCart}
-              reservedFlavorIds={reservedFlavorIds}
-            />
+            <CatalogView inventory={inventoryData} onSelect={addToCart} />
           )}
 
           {/* Cart */}
@@ -430,7 +429,7 @@ export function SaleFormModal({
               <div className="bg-[#1B2030] rounded-xl border border-white/10 overflow-hidden max-h-32 overflow-y-auto">
                 {cart.map((item) => {
                   const flavor = flavors.find((f) => f.id === item.flavorId);
-                  const availableQty = flavor?.quantity ?? 0;
+                  const availableQty = flavor ? flavorAvailableQuantity(flavor) : 0;
                   return (
                     <div
                       key={item.flavorId}

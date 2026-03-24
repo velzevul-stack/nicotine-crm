@@ -814,6 +814,15 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       return;
     }
 
+    if (costPriceValue > unitPriceValue + 0.005) {
+      toast({
+        title: 'Ошибка',
+        description: 'Себестоимость не может быть больше розничной цены',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const hasCategoryCustomFields = !!(
       selectedCategory?.customFields && selectedCategory.customFields.length > 0
     );
