@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScanLine, Keyboard } from 'lucide-react';
@@ -41,19 +41,25 @@ function playScanBeep() {
   }
 }
 
-/** Частые форматы штрихкодов (не только QR). */
+/** Все форматы, которые отдаёт Html5QrcodeSupportedFormats (html5-qrcode). */
 const BARCODE_FORMATS: Html5QrcodeSupportedFormats[] = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.QR_CODE,
+  Html5QrcodeSupportedFormats.AZTEC,
+  Html5QrcodeSupportedFormats.CODABAR,
   Html5QrcodeSupportedFormats.CODE_39,
   Html5QrcodeSupportedFormats.CODE_93,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.DATA_MATRIX,
+  Html5QrcodeSupportedFormats.MAXICODE,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.PDF_417,
+  Html5QrcodeSupportedFormats.RSS_14,
+  Html5QrcodeSupportedFormats.RSS_EXPANDED,
   Html5QrcodeSupportedFormats.UPC_A,
   Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.ITF,
-  Html5QrcodeSupportedFormats.CODABAR,
-  Html5QrcodeSupportedFormats.QR_CODE,
-  Html5QrcodeSupportedFormats.DATA_MATRIX,
+  Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
 ];
 
 const MIN_GAP_MS = 500;
@@ -226,9 +232,6 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
             <ScanLine className="w-5 h-5" />
             Скан штрихкода
           </DialogTitle>
-          <DialogDescription className="text-left text-xs text-muted-foreground">
-            EAN, Code 128, UPC и др. Звук при успешном чтении. Повтор того же кода — не чаще чем раз в ~1.5 с.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
