@@ -10,19 +10,23 @@ import {
 } from '@/lib/db/entities';
 import { z } from 'zod';
 
+const emptyToUndefined = (v: unknown) =>
+  v === '' || v === null || v === undefined ? undefined : v;
+
 const createSchema = z.object({
   barcode: z.string().optional().nullable(),
   categoryId: z.string().uuid().optional(),
-  categoryName: z.string().min(1).optional(),
+  categoryName: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   brandId: z.string().uuid().optional(),
-  brandName: z.string().min(1).optional(),
+  brandName: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   brandEmoji: z.string().optional(),
   formatId: z.string().uuid().optional(),
-  formatName: z.string().min(1).optional(),
+  formatName: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   strengthLabel: z.string().optional(), // Для жидкостей/снюса - крепость (mg), для расходников - сопротивление (Ω)
   ohmValue: z.string().optional(), // Для расходников - омы (0.4, 1, 0.6)
   resistanceValue: z.string().optional(), // Для расходников - сопротивление (Ω)
-  flavorName: z.string().min(1).optional(), // Опционально для расходников
+  // Клиент шлёт flavorName: "" для расходников — без preprocess Zod ломает .min(1).optional()
+  flavorName: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   costPrice: z.number().finite().min(0, { message: 'Себестоимость не может быть отрицательной' }),
   unitPrice: z.number().min(0),
   quantity: z.number().int().min(0).default(0),
@@ -64,7 +68,8 @@ export async function POST(request: NextRequest) {
 
   const ds = await getDataSource();
 
-  return ds.transaction(async (em) => {
+  try {
+    return await ds.transaction(async (em) => {
     const shopId = session.shopId;
 
     // 1. Resolve Category
@@ -140,7 +145,10 @@ export async function POST(request: NextRequest) {
     const isLiquid = categoryNameLower.includes('жидкост') || categoryNameLower.includes('liquid');
     const isDevice = categoryNameLower.includes('устройств') || categoryNameLower.includes('device');
     const isSnus = categoryNameLower.includes('снюс') || categoryNameLower.includes('snus');
-    const isConsumable = categoryNameLower.includes('расходник') || categoryNameLower.includes('consumable');
+    const isConsumable =
+      categoryNameLower.includes('расходник') ||
+      categoryNameLower.includes('расходн') ||
+      categoryNameLower.includes('consumable');
     
     // Определяем поля по customFields, если они настроены
     const strengthField = customFields.find((f: any) => f.target === 'strength_label');
@@ -354,5 +362,11 @@ export async function POST(request: NextRequest) {
     await em.getRepository(StockItemEntity).save(stock);
 
     return NextResponse.json({ success: true, flavorId: flavor.id });
-  });
+    });
+  } catch (err) {
+    console.error('POST /api/inventory/product', err);
+    const message =
+      err instanceof Error ? err.message : 'Ошибка при создании товара';
+    return NextResponse.json({ message }, { status: 500 });
+  }
 }
