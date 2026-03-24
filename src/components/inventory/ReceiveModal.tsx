@@ -62,26 +62,46 @@ function areSimilar(str1: string, str2: string): boolean {
   return differences <= 2;
 }
 
-/** Омы и доп. числовое поле: скобки в вводе, запятая, «.8», суффиксы Ω — нормализуем (часто с Android). */
-function normalizeDecimalNumericInput(raw: string): { ok: true; normalized: string } | { ok: false } {
-  let s = raw.trim();
-  if (!s) return { ok: false };
+type DecimalParseOpts = { min?: number; max?: number };
+
+/** Омы и доп. поля: скобки, запятая, «.8», Ω, пробелы, странные символы с клавиатур — нормализуем. */
+function normalizeDecimalNumericInput(
+  raw: string,
+  opts?: DecimalParseOpts,
+): { ok: true; normalized: string } | { ok: false; reason: 'empty' | 'format' | 'range' } {
+  let s = raw.normalize('NFKC').trim();
+  if (!s) return { ok: false, reason: 'empty' };
   while (s.startsWith('(') && s.endsWith(')')) {
-    s = s.slice(1, -1).trim();
+    s = s.slice(1, -1).normalize('NFKC').trim();
   }
-  s = s.replace(/[ΩΩ]|ohm|\bом\b/gi, '').trim();
+  s = s.replace(/\s/g, '');
+  s = s.replace(/[ΩΩ]|ohm|ом/gi, '');
+
   const commaCount = (s.match(/,/g) || []).length;
-  if (commaCount === 1 && !s.includes('.')) {
+  const hasDot = s.includes('.');
+  if (commaCount === 1 && !hasDot) {
     s = s.replace(',', '.');
   } else {
     s = s.replace(/,/g, '');
   }
+
   if (s.startsWith('.')) s = `0${s}`;
   if (s.endsWith('.')) s = s.slice(0, -1);
-  if (!/^\d+(\.\d+)?$/.test(s)) return { ok: false };
-  const n = Number(s);
-  if (!Number.isFinite(n) || n < 0) return { ok: false };
-  return { ok: true, normalized: s };
+
+  let token = s;
+  if (!/^\d+(\.\d+)?$/.test(token)) {
+    const m = s.match(/\d+(?:\.\d+)?/);
+    if (!m) return { ok: false, reason: 'format' };
+    token = m[0];
+  }
+
+  const n = Number(token);
+  if (!Number.isFinite(n) || n < 0) return { ok: false, reason: 'format' };
+
+  if (opts?.min !== undefined && n + 1e-9 < opts.min) return { ok: false, reason: 'range' };
+  if (opts?.max !== undefined && n - 1e-9 > opts.max) return { ok: false, reason: 'range' };
+
+  return { ok: true, normalized: token };
 }
 
 export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: ReceiveModalProps) {
@@ -803,11 +823,15 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             });
             return;
           }
-          const ohmParsed = normalizeDecimalNumericInput(formData.ohmValue);
+          const ohmParsed = normalizeDecimalNumericInput(formData.ohmValue, { min: 0.01, max: 100 });
           if (!ohmParsed.ok) {
+            const desc =
+              ohmParsed.reason === 'range'
+                ? 'Номинал омов: от 0,01 до 100 (целое или с точкой/запятой, например 4 или 0,8).'
+                : 'Номинал омов: введите число (например 4, 0.8, 1,2 или 0,15).';
             toast({
               title: 'Ошибка',
-              description: 'Номинал омов — только число, например 0.8 или 0,8 (запятая тоже подойдёт).',
+              description: desc,
               variant: 'destructive',
             });
             return;
@@ -1316,11 +1340,11 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                   <Input
                     value={formData.ohmValue}
                     onChange={e => setFormData({...formData, ohmValue: e.target.value})}
-                    placeholder="Например 0.8 или 0,8"
+                    placeholder="Например 0.8, 4 или 1,2"
                     required
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Указано на койле или упаковке
+                    От 0,01 до 100 Ом — как на койле или упаковке
                   </p>
                 </div>
               )}
