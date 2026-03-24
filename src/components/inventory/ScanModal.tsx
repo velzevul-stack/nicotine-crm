@@ -65,6 +65,30 @@ const BARCODE_FORMATS: Html5QrcodeSupportedFormats[] = [
 const MIN_GAP_MS = 500;
 const SAME_CODE_COOLDOWN_MS = 1500;
 
+/** Ждём появления узла в DOM (портал диалога) без долгой задержки — на Android длинный setTimeout ломает связь с user gesture и камеру снова «спрашивают». */
+function waitForElementById(elementId: string, isCancelled: () => boolean, maxFrames = 90): Promise<boolean> {
+  return new Promise((resolve) => {
+    let frames = 0;
+    const step = () => {
+      if (isCancelled()) {
+        resolve(false);
+        return;
+      }
+      if (typeof document !== 'undefined' && document.getElementById(elementId)) {
+        resolve(true);
+        return;
+      }
+      frames += 1;
+      if (frames >= maxFrames) {
+        resolve(!!(typeof document !== 'undefined' && document.getElementById(elementId)));
+        return;
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+}
+
 interface ScanModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -117,6 +141,9 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
       await stopScanner();
       if (cancelled) return;
 
+      const domReady = await waitForElementById(readerId, () => cancelled);
+      if (!domReady || cancelled) return;
+
       try {
         const scanner = new Html5Qrcode(readerId, {
           verbose: false,
@@ -136,13 +163,12 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
             return { width: w, height: h };
           },
           aspectRatio: 1.25,
+          // Без max/advanced: на части Android OverconstrainedError → второй вызов start() и повторный запрос камеры
           videoConstraints: {
             facingMode: 'environment',
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            // focusMode не в lib.dom; браузер может применить на части Android
-            advanced: [{ focusMode: 'continuous' }],
-          } as unknown as MediaTrackConstraints,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
         };
 
         const onDecoded = (decodedText: string) => {
@@ -185,9 +211,7 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
       }
     };
 
-    const timer = window.setTimeout(() => {
-      void startScanner();
-    }, 180);
+    void startScanner();
 
     let removePermListener: (() => void) | undefined;
     if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
@@ -208,7 +232,6 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
       removePermListener?.();
       void stopScanner();
     };
