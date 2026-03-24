@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Plus, Minus, ScanLine, PackagePlus, ChevronRight, ChevronDown, ArrowLeft, Check, X, AlertCircle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api-client';
+import { api, ApiException } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { ScanModal } from './ScanModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -656,8 +656,9 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     brandId: '',
     brandName: '',
     brandEmoji: '',
-    strengthLabel: '', // Для жидкостей и снюса - крепость (mg), для расходников - сопротивление (Ω)
-    ohmValue: '', // Для расходников - омы (0.4, 1, 0.6 и т.д.)
+    strengthLabel: '', // Жидкости/снюс: мг; кастомные поля strength_label
+    ohmValue: '', // Расходники: номинал Ом
+    consumablePackQty: '', // Расходники: опционально — подпись к позиции (бывш. «в скобках»)
     flavorName: '',
     costPrice: 0,
     unitPrice: 0,
@@ -688,8 +689,11 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                            selectedCategory?.name?.toLowerCase().includes('device');
   const isSnusCategory = selectedCategory?.name?.toLowerCase().includes('снюс') || 
                          selectedCategory?.name?.toLowerCase().includes('snus');
-  const isConsumableCategory = selectedCategory?.name?.toLowerCase().includes('расходник') || 
-                                selectedCategory?.name?.toLowerCase().includes('consumable');
+  const catNameLower = selectedCategory?.name?.toLowerCase() || '';
+  const isConsumableCategory =
+    catNameLower.includes('расходник') ||
+    catNameLower.includes('расходн') ||
+    catNameLower.includes('consumable');
   const isDisposableCategory = selectedCategory?.name?.toLowerCase().includes('одноразк') || 
                                 selectedCategory?.name?.toLowerCase().includes('disposable');
 
@@ -749,8 +753,19 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
         quantity: formData.quantity,
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       console.error('Create error:', error);
+      const message =
+        error instanceof ApiException
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Не удалось создать товар';
+      toast({
+        title: 'Ошибка',
+        description: message,
+        variant: 'destructive',
+      });
     },
   });
 
@@ -761,7 +776,12 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     let legacyConsumableResistanceNormalized: string | undefined;
     
     if (isNewBrand && similarBrands.length > 0) {
-      return; // Не отправляем если есть похожие бренды
+      toast({
+        title: 'Похожий бренд уже есть',
+        description: 'Выберите существующий бренд или измените название.',
+        variant: 'destructive',
+      });
+      return;
     }
     
     // Валидация обязательных полей
@@ -793,65 +813,75 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       return;
     }
 
-    // Validation Logic
-    if (selectedCategory?.customFields && selectedCategory.customFields.length > 0) {
-        // Dynamic Validation
-        const missingFields = selectedCategory.customFields.filter((f: any) => 
-            f.required && (
-                f.target === 'flavor_name' ? !formData.flavorName :
-                f.target === 'strength_label' ? !formData.strengthLabel :
-                !formData.customValues?.[f.name]
-            )
-        );
-        
-        if (missingFields.length > 0) {
-             toast({
-                title: 'Ошибка',
-                description: `Заполните обязательные поля: ${missingFields.map((f: any) => f.label).join(', ')}`,
-                variant: 'destructive',
-            });
-            return;
-        }
-    } else {
-        // Legacy Validation
-        if (isConsumableCategory) {
-          if (!formData.ohmValue?.trim()) {
-            toast({
-              title: 'Ошибка',
-              description: 'Введите значение омов (например: 0.4, 1, 0.6)',
-              variant: 'destructive',
-            });
-            return;
-          }
-          const ohmParsed = normalizeDecimalNumericInput(formData.ohmValue, { min: 0.01, max: 100 });
-          if (!ohmParsed.ok) {
-            const desc =
-              ohmParsed.reason === 'range'
-                ? 'Номинал омов: от 0,01 до 100 (целое или с точкой/запятой, например 4 или 0,8).'
-                : 'Номинал омов: введите число (например 4, 0.8, 1,2 или 0,15).';
-            toast({
-              title: 'Ошибка',
-              description: desc,
-              variant: 'destructive',
-            });
-            return;
-          }
-          legacyConsumableOhmNormalized = ohmParsed.normalized;
+    const hasCategoryCustomFields = !!(
+      selectedCategory?.customFields && selectedCategory.customFields.length > 0
+    );
 
-          if (formData.strengthLabel?.trim()) {
-            const qtyParsed = normalizeDecimalNumericInput(formData.strengthLabel);
-            if (!qtyParsed.ok) {
-              toast({
-                title: 'Ошибка',
-                description: 'Во втором поле — только число, например 1 или 0,8.',
-                variant: 'destructive',
-              });
-              return;
-            }
-            legacyConsumableResistanceNormalized = qtyParsed.normalized;
-          }
-        } else if (isDeviceCategory || isDisposableCategory) {
-          // Для устройств и одноразок: нужен цвет/вкус
+    // Обязательные кастомные поля категории
+    if (hasCategoryCustomFields) {
+      const missingFields = selectedCategory!.customFields.filter(
+        (f: any) =>
+          f.required &&
+          (f.target === 'flavor_name'
+            ? !formData.flavorName
+            : f.target === 'strength_label'
+              ? !formData.strengthLabel
+              : !formData.customValues?.[f.name]),
+      );
+
+      if (missingFields.length > 0) {
+        toast({
+          title: 'Ошибка',
+          description: `Заполните обязательные поля: ${missingFields.map((f: any) => f.label).join(', ')}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    // Расходники: омы нужны всегда (и при своих полях категории — иначе нет formatName на сервере)
+    if (isConsumableCategory) {
+      if (!formData.ohmValue?.trim()) {
+        toast({
+          title: 'Ошибка',
+          description: 'Введите значение омов (например: 0.4, 1, 0.6)',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const ohmParsed = normalizeDecimalNumericInput(formData.ohmValue, { min: 0.01, max: 100 });
+      if (!ohmParsed.ok) {
+        const desc =
+          ohmParsed.reason === 'range'
+            ? 'Номинал омов: от 0,01 до 100 (целое или с точкой/запятой, например 4 или 0,8).'
+            : 'Номинал омов: введите число (например 4, 0.8, 1,2 или 0,15).';
+        toast({
+          title: 'Ошибка',
+          description: desc,
+          variant: 'destructive',
+        });
+        return;
+      }
+      legacyConsumableOhmNormalized = ohmParsed.normalized;
+
+      if (formData.consumablePackQty?.trim()) {
+        const qtyParsed = normalizeDecimalNumericInput(formData.consumablePackQty);
+        if (!qtyParsed.ok) {
+          toast({
+            title: 'Ошибка',
+            description: 'Во втором поле — только число, например 1 или 0,8.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        legacyConsumableResistanceNormalized = qtyParsed.normalized;
+      }
+    }
+
+    // Legacy-валидация без кастомных полей категории
+    if (!hasCategoryCustomFields) {
+      if (!isConsumableCategory) {
+        if (isDeviceCategory || isDisposableCategory) {
           if (!formData.flavorName?.trim()) {
             toast({
               title: 'Ошибка',
@@ -861,7 +891,6 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             return;
           }
         } else {
-          // Для жидкостей и снюса: нужен вкус
           if (!formData.flavorName?.trim()) {
             toast({
               title: 'Ошибка',
@@ -871,26 +900,25 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             return;
           }
         }
-        
-        // Для жидкостей при новом бренде нужна крепость
-        if (isLiquidCategory && isNewBrand && !formData.strengthLabel?.trim()) {
-          toast({
-            title: 'Ошибка',
-            description: 'Введите крепость (мг)',
-            variant: 'destructive',
-          });
-          return;
-        }
-        
-        // Для снюса крепость нужна всегда
-        if (isSnusCategory && !formData.strengthLabel?.trim()) {
-          toast({
-            title: 'Ошибка',
-            description: 'Введите крепость (мг)',
-            variant: 'destructive',
-          });
-          return;
-        }
+      }
+
+      if (isLiquidCategory && isNewBrand && !formData.strengthLabel?.trim()) {
+        toast({
+          title: 'Ошибка',
+          description: 'Введите крепость (мг)',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (isSnusCategory && !formData.strengthLabel?.trim()) {
+        toast({
+          title: 'Ошибка',
+          description: 'Введите крепость (мг)',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
     
     if (!formData.brandName && !formData.brandId) {
@@ -924,24 +952,25 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       customValues: Object.keys(allCustomValues).length > 0 ? allCustomValues : undefined,
     };
 
-    if (selectedCategory?.customFields && selectedCategory.customFields.length > 0) {
-        // Dynamic Mode Payload
-        payload.flavorName = formData.flavorName;
-        payload.strengthLabel = formData.strengthLabel;
+    if (hasCategoryCustomFields) {
+      payload.flavorName = formData.flavorName;
+      payload.strengthLabel = formData.strengthLabel;
     } else {
-        // Legacy Mode Payload
-        payload.flavorName = (isDeviceCategory || isDisposableCategory)
-            ? formData.flavorName
-            : isConsumableCategory 
-            ? '' 
+      payload.flavorName =
+        isDeviceCategory || isDisposableCategory
+          ? formData.flavorName
+          : isConsumableCategory
+            ? ''
             : formData.flavorName;
-        
-        payload.ohmValue = isConsumableCategory ? legacyConsumableOhmNormalized ?? formData.ohmValue.trim() : undefined;
-        payload.resistanceValue =
-          isConsumableCategory && legacyConsumableResistanceNormalized !== undefined
-            ? legacyConsumableResistanceNormalized
-            : undefined;
-        payload.strengthLabel = formData.strengthLabel;
+      payload.strengthLabel = formData.strengthLabel;
+    }
+
+    if (isConsumableCategory) {
+      payload.ohmValue = legacyConsumableOhmNormalized ?? formData.ohmValue.trim();
+      payload.resistanceValue =
+        legacyConsumableResistanceNormalized !== undefined
+          ? legacyConsumableResistanceNormalized
+          : undefined;
     }
 
     if (createNewCategory) {
@@ -957,12 +986,13 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
         payload.brandEmoji = formData.brandEmoji;
       }
       
-      if (selectedCategory?.customFields && selectedCategory.customFields.length > 0) {
-          // Dynamic Format Name
-          if (formData.strengthLabel) {
-              payload.formatName = `${formData.brandName} ${formData.strengthLabel}`.trim();
+      if (hasCategoryCustomFields) {
+          if (isConsumableCategory && legacyConsumableOhmNormalized) {
+            payload.formatName = `${formData.brandName} ${legacyConsumableOhmNormalized}`;
+          } else if (formData.strengthLabel) {
+            payload.formatName = `${formData.brandName} ${formData.strengthLabel}`.trim();
           } else {
-              payload.formatName = formData.brandName;
+            payload.formatName = formData.brandName;
           }
       } else {
           // Legacy Format Name
@@ -977,13 +1007,14 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       payload.brandId = formData.brandId;
       const selectedBrand = brands.find((b: any) => b.id === formData.brandId);
       
-      if (selectedCategory?.customFields && selectedCategory.customFields.length > 0) {
-          // Dynamic Format Selection
+      if (hasCategoryCustomFields) {
            let formatName = selectedBrand?.name || '';
-           if (formData.strengthLabel) {
-               formatName = `${selectedBrand?.name || ''} ${formData.strengthLabel}`.trim();
+           if (isConsumableCategory && legacyConsumableOhmNormalized) {
+             formatName = `${selectedBrand?.name || ''} ${legacyConsumableOhmNormalized}`.trim();
+           } else if (formData.strengthLabel) {
+             formatName = `${selectedBrand?.name || ''} ${formData.strengthLabel}`.trim();
            }
-           
+
            const selectedFormat = productFormats.find((f: any) => 
               f.brandId === formData.brandId && f.name === formatName
             );
@@ -1019,8 +1050,14 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       }
     }
     
-    // Нормализация крепости
-    if ((isLiquidCategory || isSnusCategory || isDisposableCategory || (selectedCategory?.customFields && selectedCategory.customFields.length > 0)) && payload.strengthLabel) {
+    // Нормализация крепости (не для расходников — иначе «20» в кастомном поле превратится в mg)
+    if (
+      payload.strengthLabel &&
+      (isLiquidCategory ||
+        isSnusCategory ||
+        isDisposableCategory ||
+        (hasCategoryCustomFields && !isConsumableCategory))
+    ) {
       let normalizedStrength = payload.strengthLabel.trim();
       // Only append mg if it matches digits only and we are in legacy liquid/snus mode OR if the field is named "strength" (heuristic)
       // For now, let's be conservative and only do it for legacy categories to avoid messing up "Ohms" if they use strengthLabel for it.
@@ -1113,6 +1150,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                     brandEmoji: '',
                     strengthLabel: '',
                     ohmValue: '',
+                    consumablePackQty: '',
                     flavorName: '',
                     customValues: {},
                   });
@@ -1187,6 +1225,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                       brandName: '',
                       brandEmoji: '',
                       ohmValue: '',
+                      consumablePackQty: '',
                       unitPrice: selectedFormat ? selectedFormat.unitPrice : formData.unitPrice,
                       customValues: {},
                     });
@@ -1333,37 +1372,6 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 </div>
               )}
 
-              {/* Омы для расходников - показываем всегда когда выбран бренд */}
-              {isConsumableCategory && (formData.brandName || formData.brandId) && (
-                <div className="space-y-2">
-                  <Label>Омы (номинал)</Label>
-                  <Input
-                    value={formData.ohmValue}
-                    onChange={e => setFormData({...formData, ohmValue: e.target.value})}
-                    placeholder="Например 0.8, 4 или 1,2"
-                    required
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    От 0,01 до 100 Ом — как на койле или упаковке
-                  </p>
-                </div>
-              )}
-
-              {/* Доп. подпись для расходников (необязательно) — уходит в название позиции */}
-              {isConsumableCategory && formData.ohmValue && (
-                <div className="space-y-2">
-                  <Label>Дополнение к названию (необязательно)</Label>
-                  <Input
-                    value={formData.strengthLabel}
-                    onChange={e => setFormData({...formData, strengthLabel: e.target.value})}
-                    placeholder="Например 5 — если нужно количество в упаковке"
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Только число. Будет показано рядом с омами в списке товаров, если заполнить
-                  </p>
-                </div>
-              )}
-
               {/* Вкус для жидкостей и снюса */}
               {(isLiquidCategory || isSnusCategory) && (
                 <div className="space-y-2">
@@ -1402,6 +1410,38 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                   />
                 </div>
               )}
+            </>
+          )}
+
+          {isConsumableCategory && (formData.brandName || formData.brandId) && (
+            <>
+              <div className="space-y-2">
+                <Label>Омы (номинал)</Label>
+                <Input
+                  value={formData.ohmValue}
+                  onChange={(e) => setFormData({ ...formData, ohmValue: e.target.value })}
+                  placeholder="Например 0.8, 4 или 1,2"
+                  required
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  От 0,01 до 100 Ом — как на койле или упаковке
+                </p>
+              </div>
+              {formData.ohmValue?.trim() ? (
+                <div className="space-y-2">
+                  <Label>Дополнение к названию (необязательно)</Label>
+                  <Input
+                    value={formData.consumablePackQty}
+                    onChange={(e) =>
+                      setFormData({ ...formData, consumablePackQty: e.target.value })
+                    }
+                    placeholder="Например 5 — если нужно количество в упаковке"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Только число. Будет показано рядом с омами в списке товаров, если заполнить
+                  </p>
+                </div>
+              ) : null}
             </>
           )}
 
@@ -1565,7 +1605,11 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 else if (isConsumableCategory) fieldLabel = 'Модель';
                 else if (isSnusCategory || isLiquidCategory || isDisposableCategory) fieldLabel = 'Вкус';
                 
-                flavorDisplay = flavorName || fieldLabel;
+                if (isConsumableCategory && formData.consumablePackQty?.trim()) {
+                  flavorDisplay = `(${formData.consumablePackQty.trim()})`;
+                } else {
+                  flavorDisplay = flavorName || fieldLabel;
+                }
             }
 
             const previewText = `${brandEmoji || ''}${displayFormatName}${brandEmoji || ''}: (${unitPrice || 0} ${currency})\n• ${flavorDisplay}`;
@@ -1586,6 +1630,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 createMutation.isPending || 
                 (isNewBrand && similarBrands.length > 0) ||
                 (!formData.brandName && !formData.brandId) ||
+                (isConsumableCategory && !formData.ohmValue?.trim()) ||
                 (selectedCategory?.customFields && selectedCategory.customFields.length > 0
                   ? selectedCategory.customFields.some((f: any) => 
                       f.required && (
@@ -1595,7 +1640,6 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                       )
                     )
                   : (
-                    (isConsumableCategory && !formData.ohmValue) ||
                     ((isDeviceCategory || isDisposableCategory) && !formData.flavorName) ||
                     (isLiquidCategory && (!formData.flavorName || (isNewBrand && !formData.strengthLabel))) ||
                     (isSnusCategory && (!formData.flavorName || !formData.strengthLabel))
