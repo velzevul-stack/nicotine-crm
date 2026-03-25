@@ -81,6 +81,30 @@ function applyTextStyle(cell: ExcelJS.Cell) {
   cell.alignment = WRAP_ALIGNMENT;
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Склеивает бренд и хвост без повтора, если хвост уже начинается с названия бренда (без учёта регистра). */
+function joinBrandName(brand: string, detail: string): string {
+  const b = brand.trim();
+  const d = detail.trim();
+  if (!d) return b;
+  if (!b) return d;
+  const re = new RegExp(`^${escapeRegExp(b)}(\\s|$)`, 'i');
+  if (re.test(d)) return d;
+  return `${b} ${d}`;
+}
+
+/** Убирает двойной префикс бренда в начале строки (напр. «Elf Bar Elf Bar Mango»). */
+function dedupeLeadingBrandInLine(brand: string, line: string): string {
+  const b = brand.trim();
+  const t = line.trim();
+  if (!b || !t) return t;
+  const re = new RegExp(`^(?:${escapeRegExp(b)}\\s+){2,}`, 'i');
+  return t.replace(re, `${b} `);
+}
+
 function categoryType(catName: string): 'liquids' | 'snus' | 'devices' | 'consumables' | 'disposables' | 'other' {
   const n = catName.toLowerCase();
   if (n.includes('жидкост') || n.includes('liquid')) return 'liquids';
@@ -130,7 +154,7 @@ export async function generateStockTable(
         if (formatFlavors.length === 0) continue;
 
         const formatLabel = [format.name, format.strengthLabel].filter(Boolean).join(' ');
-        const brandFormatLabel = `${brand.name} ${formatLabel}`.trim();
+        const brandFormatLabel = joinBrandName(brand.name, formatLabel);
         const priceStr = priceInline(format.unitPrice);
 
         const brandCell = ws.getRow(row).getCell(1);
@@ -182,7 +206,7 @@ export async function generateStockTable(
         for (const fl of input.flavors.filter((f) => f.productFormatId === format.id)) {
           byStrength.get(str)!.push({
             brand: brand.name,
-            flavor: `${brand.name} ${fl.name}${priceStr}`.trim(),
+            flavor: `${joinBrandName(brand.name, fl.name)}${priceStr}`,
             flavorId: fl.id,
           });
         }
@@ -267,7 +291,7 @@ export async function generateStockTable(
           for (const fl of flavors) {
             const c1 = ws.getRow(row).getCell(1);
             const c2 = ws.getRow(row).getCell(2);
-            c1.value = `${format.name} ${fl.name}`;
+            c1.value = dedupeLeadingBrandInLine(brand.name, `${format.name} ${fl.name}`.trim());
             c2.value = format.unitPrice ? priceOnly(format.unitPrice) : '';
             const qty = stockMap.get(fl.id) ?? 0;
             if (qty === 0) applyOutOfStockStyle(c1);
@@ -278,7 +302,7 @@ export async function generateStockTable(
         } else {
           const c1 = ws.getRow(row).getCell(1);
           const c2 = ws.getRow(row).getCell(2);
-          c1.value = format.name;
+          c1.value = dedupeLeadingBrandInLine(brand.name, format.name);
           c2.value = format.unitPrice ? priceOnly(format.unitPrice) : '';
           applyTextStyle(c1);
           applyTextStyle(c2);
@@ -307,12 +331,12 @@ export async function generateStockTable(
         const flavors = input.flavors.filter((f) => f.productFormatId === format.id);
         const priceStr = priceInline(format.unitPrice);
         const formatCell = ws.getRow(row).getCell(1);
-        formatCell.value = `${brand.name} ${format.name}${priceStr}`.trim();
+        formatCell.value = `${joinBrandName(brand.name, format.name)}${priceStr}`;
         applyBrandStyle(formatCell);
         row++;
         for (const fl of flavors) {
           const cell = ws.getRow(row).getCell(1);
-          cell.value = fl.name;
+          cell.value = joinBrandName(brand.name, fl.name);
           const qty = stockMap.get(fl.id) ?? 0;
           if (qty === 0) applyOutOfStockStyle(cell);
           else applyTextStyle(cell);
