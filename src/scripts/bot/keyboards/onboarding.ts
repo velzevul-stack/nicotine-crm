@@ -12,11 +12,11 @@ export function getOnboardingKeyboard(embedReferralCode?: string | null): Inline
   const raw = embedReferralCode?.trim();
   const safe = raw && REFERRAL_CODE_FOR_CALLBACK.test(raw) ? raw.toUpperCase() : null;
   const sellerCb = safe ? `rs_${safe}` : 'role_seller';
-  const clientCb = safe ? `rc_${safe}` : 'role_client';
+  // const clientCb = safe ? `rc_${safe}` : 'role_client';
   const keyboard = {
     inline_keyboard: [
       [{ text: '👨‍💼 Я Продавец', callback_data: sellerCb }],
-      [{ text: '👤 Я Клиент', callback_data: clientCb }],
+      // [{ text: '👤 Я Клиент', callback_data: clientCb }],
       [{ text: '📢 Канал с новостями', url: TELEGRAM_INFO_CHANNEL_URL }],
     ],
   };

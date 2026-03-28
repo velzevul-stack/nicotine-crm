@@ -190,13 +190,13 @@ bot.command('start', async (ctx) => {
         ? startParam.toUpperCase()
         : null;
     const sellerCb = refForCb ? `rs_${refForCb}` : 'role_seller';
-    const clientCb = refForCb ? `rc_${refForCb}` : 'role_client';
+    // const clientCb = refForCb ? `rc_${refForCb}` : 'role_client';
 
     const keyboard = {
       reply_markup: {
         inline_keyboard: [
           [{ text: 'Я Продавец', callback_data: sellerCb }],
-          [{ text: 'Я Клиент', callback_data: clientCb }],
+          // [{ text: 'Я Клиент', callback_data: clientCb }],
           [{ text: '📢 Канал с новостями', url: TELEGRAM_INFO_CHANNEL_URL }],
         ],
       },
