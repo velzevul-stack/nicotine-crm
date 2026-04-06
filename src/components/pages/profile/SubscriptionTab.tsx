@@ -1,8 +1,9 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import { Calendar, Crown, Gift, Star, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { Calendar, Crown, Gift, Star, AlertCircle, CheckCircle2, Clock, Bitcoin, ExternalLink, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -13,9 +14,12 @@ interface SubscriptionInfo {
   referralCode: string | null;
   referralsCount: number;
   activeReferralsCount: number;
+  referralBalance: number;
 }
 
 export function SubscriptionTab() {
+  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
+
   const { data: subscriptionInfo, isLoading } = useQuery({
     queryKey: ['subscription'],
     queryFn: () => api<SubscriptionInfo>('/api/subscription'),
@@ -25,6 +29,14 @@ export function SubscriptionTab() {
     queryKey: ['referrals'],
     queryFn: () => api<{ referralLink: string | null }>('/api/referrals'),
     enabled: !!subscriptionInfo?.referralCode,
+  });
+
+  const createInvoiceMutation = useMutation({
+    mutationFn: () => api<{ invoiceUrl: string }>('/api/payments/nowpayments/create-invoice', { method: 'POST' }),
+    onSuccess: (data) => {
+      setInvoiceUrl(data.invoiceUrl);
+      window.open(data.invoiceUrl, '_blank');
+    },
   });
 
   if (isLoading) {
@@ -64,9 +76,11 @@ export function SubscriptionTab() {
       ? `https://t.me/your_bot?start=${subscriptionInfo.referralCode}`
       : null);
 
+  const needsSubscription = isExpired || (isTrial && isTrialExpired) || (!isActive);
+
   return (
     <div className="space-y-4">
-      {/* Статус подписки — пастельная карточка */}
+      {/* Статус подписки */}
       <div className="bg-[#F2D6DE] rounded-[20px] p-5">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
@@ -102,7 +116,7 @@ export function SubscriptionTab() {
                 <Calendar size={16} className="text-[#1A1A1A] opacity-70" strokeWidth={1.5} />
                 <span className="text-sm text-[#1A1A1A] opacity-70">Пробный период до:</span>
               </div>
-              <span className={`text-sm font-medium ${isTrialExpired ? 'text-[#111111]' : 'text-[#111111]'}`}>
+              <span className="text-sm font-medium text-[#111111]">
                 {format(trialEndsAt, 'dd MMMM yyyy', { locale: ru })}
               </span>
             </div>
@@ -129,6 +143,68 @@ export function SubscriptionTab() {
         </div>
       </div>
 
+      {/* Оплата криптой */}
+      {needsSubscription && (
+        <div className="bg-gradient-to-br from-[#1a2a3a] to-[#1B2030] rounded-[20px] p-5 border border-[#CFE6F2]/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 rounded-[12px] bg-[#CFE6F2]/15">
+              <Bitcoin size={22} className="text-[#CFE6F2]" strokeWidth={1.5} />
+            </div>
+            <div>
+              <h4 className="font-semibold text-[#F5F5F7]">Оплата криптовалютой</h4>
+              <p className="text-xs text-[#9CA3AF]">BTC, ETH, USDT и 200+ других</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 rounded-[12px] bg-[#151922] border border-white/10">
+              <span className="text-sm text-[#9CA3AF]">PRO — 1 месяц</span>
+              <span className="text-lg font-bold text-[#F5F5F7]">$10</span>
+            </div>
+
+            <button
+              onClick={() => createInvoiceMutation.mutate()}
+              disabled={createInvoiceMutation.isPending}
+              className="w-full py-3 px-4 rounded-[12px] bg-[#CFE6F2] text-[#111111] font-semibold text-sm hover:bg-[#bdd9eb] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {createInvoiceMutation.isPending ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Создание счёта...
+                </>
+              ) : (
+                <>
+                  <Bitcoin size={16} />
+                  Оплатить криптой
+                </>
+              )}
+            </button>
+
+            {invoiceUrl && (
+              <a
+                href={invoiceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 text-xs text-[#CFE6F2] hover:underline"
+              >
+                <ExternalLink size={12} />
+                Открыть страницу оплаты
+              </a>
+            )}
+
+            {createInvoiceMutation.isError && (
+              <p className="text-xs text-red-400 text-center">
+                Ошибка создания счёта. Попробуйте позже.
+              </p>
+            )}
+
+            <p className="text-xs text-[#9CA3AF] text-center">
+              Или используйте команду <code className="text-[#CFE6F2]">/subscribe</code> в боте для оплаты звёздами
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Реферальная программа */}
       {subscriptionInfo.referralCode && (
         <div className="bg-[#1B2030] rounded-[16px] p-4">
@@ -149,12 +225,12 @@ export function SubscriptionTab() {
               </div>
             </div>
 
-            {subscriptionInfo.activeReferralsCount > 0 && (
-              <div className="p-3 rounded-[12px] bg-[#BFE7E5]/20 border border-[#BFE7E5]/30">
+            {subscriptionInfo.referralBalance > 0 && (
+              <div className="p-3 rounded-[12px] bg-[#BFE7E5]/10 border border-[#BFE7E5]/20">
                 <div className="flex items-center gap-2">
                   <Star size={16} className="text-[#BFE7E5]" strokeWidth={1.5} />
                   <span className="text-sm font-medium text-[#BFE7E5]">
-                    Бесплатных месяцев: <strong className="text-[#F5F5F7]">{subscriptionInfo.activeReferralsCount}</strong>
+                    Баланс: <strong className="text-[#F5F5F7]">${subscriptionInfo.referralBalance.toFixed(2)}</strong>
                   </span>
                 </div>
               </div>
@@ -168,24 +244,6 @@ export function SubscriptionTab() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Информация о покупке подписки */}
-      {(isExpired || (isTrial && isTrialExpired)) && (
-        <div className="bg-[#1B2030] rounded-[16px] p-4 border border-[#BFE7E5]/20">
-          <div className="flex items-start gap-3">
-            <Crown size={20} className="text-[#BFE7E5] mt-0.5" strokeWidth={1.5} />
-            <div className="flex-1">
-              <h4 className="font-semibold mb-1 text-[#F5F5F7]">Продлить подписку</h4>
-              <p className="text-sm text-[#9CA3AF] mb-3">
-                Используйте команду /subscribe в Telegram боте для покупки подписки через звёзды.
-              </p>
-              <p className="text-xs text-[#9CA3AF]">
-                При покупке подписки ваш пригласивший (если есть) получит бесплатный месяц!
-              </p>
-            </div>
           </div>
         </div>
       )}

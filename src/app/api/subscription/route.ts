@@ -36,5 +36,6 @@ export async function GET() {
     referralCode: user.referralCode,
     referralsCount: referrals.length,
     activeReferralsCount: activeSubscriptions,
+    referralBalance: Number(user.referralBalance) || 0,
   });
 }

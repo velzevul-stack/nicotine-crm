@@ -13,7 +13,7 @@ import dotenv from 'dotenv';
 import { Telegraf, Context } from 'telegraf';
 import { Client } from 'pg';
 import { DataSource, IsNull } from 'typeorm';
-import { UserEntity, PostFormatEntity, UserShopEntity } from '@/lib/db/entities';
+import { UserEntity, PostFormatEntity, UserShopEntity, CryptoPaymentEntity, ReferralEarningEntity } from '@/lib/db/entities';
 import {
   ShopEntity,
   CategoryEntity,
@@ -27,6 +27,7 @@ import {
   DebtOperationEntity,
   PostFormatSuggestionEntity,
 } from '@/lib/db/entities';
+import { createInvoice, SUBSCRIPTION_PRICE_USD } from '@/lib/nowpayments';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import {
   applyWendigoSuperadminToUser,
@@ -1218,14 +1219,15 @@ bot.on('successful_payment', async (ctx) => {
     await em.getRepository(UserEntity).save(user);
     displayDate = newEndsAt.toLocaleDateString('ru-RU');
 
-    // Если у пользователя есть реферер, начисляем ему бесплатный месяц
-    if (user.referrerId) {
+    // Если у пользователя есть реферер, начисляем ему бесплатный месяц + 50% на баланс
+    const REFERRAL_PROGRAM_END = new Date('2026-07-06T23:59:59Z');
+    if (user.referrerId && now < REFERRAL_PROGRAM_END) {
       const referrer = await em.getRepository(UserEntity).findOne({ where: { id: user.referrerId } });
       if (referrer) {
-        const now = new Date();
+        const referrerNow = new Date();
         let referrerNewEndsAt: Date;
         
-        if (referrer.subscriptionStatus === 'active' && referrer.subscriptionEndsAt && new Date(referrer.subscriptionEndsAt) > now) {
+        if (referrer.subscriptionStatus === 'active' && referrer.subscriptionEndsAt && new Date(referrer.subscriptionEndsAt) > referrerNow) {
           referrerNewEndsAt = new Date(referrer.subscriptionEndsAt);
           referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
         } else {
@@ -1233,9 +1235,23 @@ bot.on('successful_payment', async (ctx) => {
           referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
         }
 
+        const referralEarning = SUBSCRIPTION_PRICE_USD * 0.5;
+        const currentBalance = Number(referrer.referralBalance) || 0;
+        referrer.referralBalance = currentBalance + referralEarning;
+
         referrer.subscriptionStatus = 'active';
         referrer.subscriptionEndsAt = referrerNewEndsAt;
         await em.getRepository(UserEntity).save(referrer);
+
+        await em.getRepository(ReferralEarningEntity).save({
+          referrerId: referrer.id,
+          referralId: user.id,
+          amount: referralEarning,
+          currency: 'usd',
+          source: 'stars' as const,
+          paymentId: null,
+        });
+
         referrerTelegramId = referrer.telegramId;
         referrerEndsAt = referrerNewEndsAt;
       }
@@ -1248,9 +1264,10 @@ bot.on('successful_payment', async (ctx) => {
       await bot.telegram.sendMessage(
         parseInt(referrerTelegramId),
         `🎉 Поздравляем!\n\n` +
-        `Ваш реферал купил подписку, и вы получили бесплатный месяц!\n\n` +
-        `Ваша подписка теперь действует до: ${new Date(referrerEndsAt).toLocaleDateString('ru-RU')}\n\n` +
-        `Используйте /referrals для просмотра всех ваших рефералов.`
+        `Ваш реферал купил подписку!\n\n` +
+        `💰 +$${(SUBSCRIPTION_PRICE_USD * 0.5).toFixed(2)} на реферальный баланс\n` +
+        `📅 +1 месяц бесплатной подписки (до ${new Date(referrerEndsAt).toLocaleDateString('ru-RU')})\n\n` +
+        `Используйте /referrals для просмотра баланса и рефералов.`
       );
     } catch (error) {
       console.error('Error notifying referrer:', error);
@@ -2051,6 +2068,78 @@ bot.action('back_to_menu', async (ctx) => {
 bot.action('subscription_buy_pro', async (ctx) => {
   const ds = await getDataSource();
   await handleBuySubscription(ctx, ds);
+});
+
+bot.action('subscription_buy_crypto', async (ctx) => {
+  console.log('[Bot] Callback: subscription_buy_crypto from user:', ctx.from.id);
+  const telegramId = String(ctx.from.id);
+  const ds = await getDataSource();
+  const userRepo = ds.getRepository(UserEntity);
+  const user = await userRepo.findOne({ where: { telegramId } });
+
+  if (!user) {
+    await ctx.answerCbQuery('❌ Пользователь не найден');
+    return;
+  }
+
+  const now = new Date();
+  const isActive = user.subscriptionStatus === 'active' &&
+    user.subscriptionEndsAt &&
+    new Date(user.subscriptionEndsAt) > now;
+
+  if (isActive) {
+    await ctx.answerCbQuery('✅ У вас уже есть активная подписка!');
+    return;
+  }
+
+  await ctx.answerCbQuery('Создаём платёж...');
+
+  try {
+    const { randomUUID } = await import('crypto');
+    const orderId = `sub_${user.id}_${randomUUID().slice(0, 8)}`;
+    const baseUrl = process.env.TELEGRAM_MINI_APP_URL || 'https://localhost:3000';
+
+    const invoice = await createInvoice({
+      priceAmount: SUBSCRIPTION_PRICE_USD,
+      priceCurrency: 'usd',
+      orderId,
+      orderDescription: `Post Stock Pro — PRO 1 мес. (${user.firstName || user.username || user.telegramId})`,
+      ipnCallbackUrl: `${baseUrl}/api/payments/nowpayments/ipn`,
+      successUrl: `${baseUrl}/`,
+      cancelUrl: `${baseUrl}/`,
+    });
+
+    const paymentRepo = ds.getRepository(CryptoPaymentEntity);
+    await paymentRepo.save({
+      userId: user.id,
+      invoiceId: String(invoice.id),
+      orderId,
+      priceAmount: SUBSCRIPTION_PRICE_USD,
+      priceCurrency: 'usd',
+      invoiceUrl: invoice.invoice_url,
+      status: 'pending',
+      subscriptionMonths: 1,
+    });
+
+    await ctx.reply(
+      `₿ Оплата криптовалютой\n\n` +
+      `💰 Сумма: $${SUBSCRIPTION_PRICE_USD} USD\n` +
+      `📦 Тариф: PRO на 1 месяц\n\n` +
+      `Поддерживаются: BTC, ETH, USDT, USDC, LTC, DOGE и 200+ других криптовалют.\n\n` +
+      `После оплаты подписка активируется автоматически в течение нескольких минут.`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '💳 Перейти к оплате', url: invoice.invoice_url }],
+            [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
+          ],
+        },
+      }
+    );
+  } catch (error) {
+    console.error('[Bot] Error creating crypto invoice:', error);
+    await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже или используйте оплату звёздами.');
+  }
 });
 
 bot.action('subscription_promo', async (ctx) => {

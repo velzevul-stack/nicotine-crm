@@ -3,7 +3,8 @@ import { Telegraf } from 'telegraf';
 import type { Context } from 'telegraf';
 import type { DataSource } from 'typeorm';
 import { getDataSource } from '@/lib/db/data-source';
-import { UserEntity, PostFormatEntity, UserShopEntity, CategoryEntity, BrandEntity, ProductFormatEntity, FlavorEntity, StockItemEntity, ShopEntity, SaleEntity, SaleItemEntity } from '@/lib/db/entities';
+import { UserEntity, PostFormatEntity, UserShopEntity, CategoryEntity, BrandEntity, ProductFormatEntity, FlavorEntity, StockItemEntity, ShopEntity, SaleEntity, SaleItemEntity, CryptoPaymentEntity, ReferralEarningEntity } from '@/lib/db/entities';
+import { createInvoice, SUBSCRIPTION_PRICE_USD } from '@/lib/nowpayments';
 import {
   getSupportTelegramUsernameForUser,
   supportUsernameToTelegramUrl,
@@ -755,7 +756,7 @@ bot.command('me', async (ctx) => {
   await ctx.reply('📱 Главное меню:', await getMainMenuForUser(ds, user));
 });
 
-// Команда /subscribe - покупка подписки через звёзды
+// Команда /subscribe - выбор способа оплаты
 bot.command('subscribe', async (ctx) => {
   const telegramId = String(ctx.from.id);
 
@@ -769,38 +770,84 @@ bot.command('subscribe', async (ctx) => {
     return;
   }
 
-  // Проверяем текущий статус подписки
   const now = new Date();
   const isActive = user.subscriptionStatus === 'active' && user.subscriptionEndsAt && new Date(user.subscriptionEndsAt) > now;
   
   if (isActive) {
     const endsAt = user.subscriptionEndsAt!;
+    const daysLeft = Math.ceil((new Date(endsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     await ctx.reply(
       `✅ У вас уже есть активная подписка!\n\n` +
-      `Подписка действует до: ${endsAt.toLocaleDateString('ru-RU')}\n\n` +
+      `Подписка действует до: ${endsAt.toLocaleDateString('ru-RU')} (осталось ${daysLeft} дней)\n\n` +
       `Используйте /me для просмотра информации о профиле.`
     );
     return;
   }
 
-  // Стоимость подписки: 1 месяц = 1000 звёзд (эквивалент $10 USD, так как 1 звезда = 1 цент USD)
+  let statusLine = '';
+  if (user.subscriptionStatus === 'trial' && user.trialEndsAt) {
+    const daysLeft = Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    statusLine = `📅 Пробный период: осталось ${daysLeft} дней\n\n`;
+  } else {
+    statusLine = `⚠️ Подписка не активна\n\n`;
+  }
+
+  await ctx.reply(
+    `💎 Тарифные планы Post Stock Pro\n\n` +
+    statusLine +
+    `Что входит в PRO:\n` +
+    `✅ Неограниченное создание форматов постов\n` +
+    `✅ Доступ к веб-версии без ограничений\n` +
+    `✅ Приоритетная поддержка\n` +
+    `✅ Участие в реферальной программе\n\n` +
+    `Выберите способ оплаты:`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '⭐ Купить PRO — 1 месяц (1000 ⭐️)', callback_data: 'subscription_buy_stars' }],
+          [{ text: '₿ Оплатить криптой — $10', callback_data: 'subscription_buy_crypto' }],
+          [{ text: '🔙 Назад', callback_data: 'profile_back' }],
+        ],
+      },
+    }
+  );
+});
+
+// Покупка через звёзды (callback, поддержка обоих callback_data для совместимости)
+bot.action(['subscription_buy_stars', 'subscription_buy_pro'], async (ctx) => {
+  const telegramId = String(ctx.from.id);
+  const ds = await getDataSource();
+  const userRepo = ds.getRepository(UserEntity);
+  const user = await userRepo.findOne({ where: { telegramId } });
+
+  if (!user) {
+    await ctx.answerCbQuery('❌ Пользователь не найден');
+    return;
+  }
+
+  const now = new Date();
+  const isActive = user.subscriptionStatus === 'active' && user.subscriptionEndsAt && new Date(user.subscriptionEndsAt) > now;
+  if (isActive) {
+    await ctx.answerCbQuery('✅ У вас уже есть активная подписка!');
+    return;
+  }
+
   const subscriptionPriceStars = 1000;
-  const subscriptionMonths = 1;
 
   try {
     await ctx.replyWithInvoice({
-      title: 'Подписка на 1 месяц',
-      description: `Подписка на сервис для продавцов (${subscriptionPriceStars} ⭐ ≈ $10 USD). После покупки ваш пригласивший (если есть) получит бесплатный месяц!`,
+      title: 'Подписка PRO на 1 месяц',
+      description: `Подписка на сервис Post Stock Pro (${subscriptionPriceStars} ⭐ ≈ $10 USD). После покупки ваш пригласивший (если есть) получит бонус!`,
       payload: `subscription_${user.id}_${Date.now()}`,
       provider_data: JSON.stringify({ userId: user.id }),
-      currency: 'XTR', // Telegram Stars
-      prices: [{ label: `Подписка на 1 месяц (${subscriptionPriceStars} ⭐)`, amount: subscriptionPriceStars }],
+      currency: 'XTR',
+      prices: [{ label: `Подписка PRO на 1 месяц (${subscriptionPriceStars} ⭐)`, amount: subscriptionPriceStars }],
       reply_markup: {
         inline_keyboard: [
           [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
         ],
       },
-    } as any); // reply_markup supported by Telegram API but omitted in Telegraf types
+    } as any);
   } catch (error) {
     console.error('Error sending invoice:', error);
     await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже.');
@@ -864,26 +911,39 @@ bot.on('successful_payment', async (ctx) => {
     await em.getRepository(UserEntity).save(user);
     displayDate = newEndsAt.toLocaleDateString('ru-RU');
 
-    // Если у пользователя есть реферер, начисляем ему бесплатный месяц
-    if (user.referrerId) {
+    // Если у пользователя есть реферер, начисляем ему бесплатный месяц + 50% на баланс
+    const REFERRAL_PROGRAM_END = new Date('2026-07-06T23:59:59Z');
+    if (user.referrerId && now < REFERRAL_PROGRAM_END) {
       const referrer = await em.getRepository(UserEntity).findOne({ where: { id: user.referrerId } });
       if (referrer) {
-        const now = new Date();
+        const referrerNow = new Date();
         let referrerNewEndsAt: Date;
         
-        if (referrer.subscriptionStatus === 'active' && referrer.subscriptionEndsAt && new Date(referrer.subscriptionEndsAt) > now) {
-          // Продлеваем существующую подписку
+        if (referrer.subscriptionStatus === 'active' && referrer.subscriptionEndsAt && new Date(referrer.subscriptionEndsAt) > referrerNow) {
           referrerNewEndsAt = new Date(referrer.subscriptionEndsAt);
           referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
         } else {
-          // Начинаем новую подписку
           referrerNewEndsAt = new Date();
           referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
         }
 
+        const referralEarning = SUBSCRIPTION_PRICE_USD * 0.5;
+        const currentBalance = Number(referrer.referralBalance) || 0;
+        referrer.referralBalance = currentBalance + referralEarning;
+
         referrer.subscriptionStatus = 'active';
         referrer.subscriptionEndsAt = referrerNewEndsAt;
         await em.getRepository(UserEntity).save(referrer);
+
+        await em.getRepository(ReferralEarningEntity).save({
+          referrerId: referrer.id,
+          referralId: user.id,
+          amount: referralEarning,
+          currency: 'usd',
+          source: 'stars' as const,
+          paymentId: null,
+        });
+
         referrerTelegramId = referrer.telegramId;
         referrerEndsAt = referrerNewEndsAt;
       }
@@ -897,9 +957,10 @@ bot.on('successful_payment', async (ctx) => {
       await bot.telegram.sendMessage(
         parseInt(referrerTelegramId),
         `🎉 Поздравляем!\n\n` +
-        `Ваш реферал купил подписку, и вы получили бесплатный месяц!\n\n` +
-        `Ваша подписка теперь действует до: ${dateStr}\n\n` +
-        `Используйте /referrals для просмотра всех ваших рефералов.`
+        `Ваш реферал купил подписку!\n\n` +
+        `💰 +$${(SUBSCRIPTION_PRICE_USD * 0.5).toFixed(2)} на реферальный баланс\n` +
+        `📅 +1 месяц бесплатной подписки (до ${dateStr})\n\n` +
+        `Используйте /referrals для просмотра баланса и рефералов.`
       );
     } catch (error) {
       console.error('Error notifying referrer:', error);
@@ -913,13 +974,84 @@ bot.on('successful_payment', async (ctx) => {
   );
 });
 
+// Обработка покупки криптой
+bot.action('subscription_buy_crypto', async (ctx) => {
+  const telegramId = String(ctx.from.id);
+  const ds = await getDataSource();
+  const userRepo = ds.getRepository(UserEntity);
+  const user = await userRepo.findOne({ where: { telegramId } });
+
+  if (!user) {
+    await ctx.answerCbQuery('❌ Пользователь не найден');
+    return;
+  }
+
+  const now = new Date();
+  const isActive = user.subscriptionStatus === 'active' &&
+    user.subscriptionEndsAt &&
+    new Date(user.subscriptionEndsAt) > now;
+
+  if (isActive) {
+    await ctx.answerCbQuery('✅ У вас уже есть активная подписка!');
+    return;
+  }
+
+  await ctx.answerCbQuery('Создаём платёж...');
+
+  try {
+    const { randomUUID } = await import('crypto');
+    const orderId = `sub_${user.id}_${randomUUID().slice(0, 8)}`;
+    const baseUrl = process.env.TELEGRAM_MINI_APP_URL || 'https://localhost:3000';
+
+    const invoice = await createInvoice({
+      priceAmount: SUBSCRIPTION_PRICE_USD,
+      priceCurrency: 'usd',
+      orderId,
+      orderDescription: `Post Stock Pro — PRO 1 мес. (${user.firstName || user.username || user.telegramId})`,
+      ipnCallbackUrl: `${baseUrl}/api/payments/nowpayments/ipn`,
+      successUrl: `${baseUrl}/`,
+      cancelUrl: `${baseUrl}/`,
+    });
+
+    const paymentRepo = ds.getRepository(CryptoPaymentEntity);
+    await paymentRepo.save({
+      userId: user.id,
+      invoiceId: String(invoice.id),
+      orderId,
+      priceAmount: SUBSCRIPTION_PRICE_USD,
+      priceCurrency: 'usd',
+      invoiceUrl: invoice.invoice_url,
+      status: 'pending',
+      subscriptionMonths: 1,
+    });
+
+    await ctx.reply(
+      `₿ Оплата криптовалютой\n\n` +
+      `💰 Сумма: $${SUBSCRIPTION_PRICE_USD} USD\n` +
+      `📦 Тариф: PRO на 1 месяц\n\n` +
+      `Поддерживаются: BTC, ETH, USDT, USDC, LTC, DOGE и 200+ других криптовалют.\n\n` +
+      `После оплаты подписка активируется автоматически в течение нескольких минут.`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '💳 Перейти к оплате', url: invoice.invoice_url }],
+            [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
+          ],
+        },
+      }
+    );
+  } catch (error) {
+    console.error('[Bot] Error creating crypto invoice:', error);
+    await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже или используйте оплату звёздами.');
+  }
+});
+
 // Обработка отмены покупки
 bot.action('subscribe_cancel', async (ctx) => {
   await ctx.answerCbQuery('Покупка отменена');
   try {
     await ctx.editMessageText('❌ Покупка подписки отменена.');
   } catch (error) {
-    // Если сообщение уже было изменено или удалено, просто отвечаем
     await ctx.reply('❌ Покупка подписки отменена.');
   }
 });
@@ -1760,41 +1892,47 @@ bot.on('text', async (ctx) => {
   }
 
   if (text === '💳 Подписка') {
-    // Вызываем логику команды /subscribe
     const now = new Date();
     const isActive = user.subscriptionStatus === 'active' && user.subscriptionEndsAt && new Date(user.subscriptionEndsAt) > now;
     
     if (isActive) {
       const endsAt = user.subscriptionEndsAt!;
+      const daysLeft = Math.ceil((new Date(endsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
       await ctx.reply(
         `✅ У вас уже есть активная подписка!\n\n` +
-        `Подписка действует до: ${endsAt.toLocaleDateString('ru-RU')}\n\n` +
+        `Подписка действует до: ${endsAt.toLocaleDateString('ru-RU')} (осталось ${daysLeft} дней)\n\n` +
         `Используйте /me для просмотра информации о профиле.`
       );
       return;
     }
 
-    const subscriptionPriceStars = 1000;
-    const subscriptionMonths = 1;
+    let statusLine = '';
+    if (user.subscriptionStatus === 'trial' && user.trialEndsAt) {
+      const trialDaysLeft = Math.ceil((new Date(user.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      statusLine = `📅 Пробный период: осталось ${trialDaysLeft} дней\n\n`;
+    } else {
+      statusLine = `⚠️ Подписка не активна\n\n`;
+    }
 
-    try {
-      await ctx.replyWithInvoice({
-        title: 'Подписка на 1 месяц',
-        description: `Подписка на сервис для продавцов (${subscriptionPriceStars} ⭐ ≈ $10 USD). После покупки ваш пригласивший (если есть) получит бесплатный месяц!`,
-        payload: `subscription_${user.id}_${Date.now()}`,
-        provider_data: JSON.stringify({ userId: user.id }),
-        currency: 'XTR',
-        prices: [{ label: `Подписка на 1 месяц (${subscriptionPriceStars} ⭐)`, amount: subscriptionPriceStars }],
+    await ctx.reply(
+      `💎 Тарифные планы Post Stock Pro\n\n` +
+      statusLine +
+      `Что входит в PRO:\n` +
+      `✅ Неограниченное создание форматов постов\n` +
+      `✅ Доступ к веб-версии без ограничений\n` +
+      `✅ Приоритетная поддержка\n` +
+      `✅ Участие в реферальной программе\n\n` +
+      `Выберите способ оплаты:`,
+      {
         reply_markup: {
           inline_keyboard: [
-            [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
+            [{ text: '⭐ Купить PRO — 1 месяц (1000 ⭐️)', callback_data: 'subscription_buy_stars' }],
+            [{ text: '₿ Оплатить криптой — $10', callback_data: 'subscription_buy_crypto' }],
+            [{ text: '🔙 Назад', callback_data: 'profile_back' }],
           ],
         },
-      } as any);
-    } catch (error) {
-      console.error('Error sending invoice:', error);
-      await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже.');
-    }
+      }
+    );
     return;
   }
 

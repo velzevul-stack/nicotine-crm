@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Ban, CheckCircle, Calendar as CalendarIcon, Users, Gift, Star } from 'lucide-react';
+import { Search, Ban, CheckCircle, Calendar as CalendarIcon, Users, Gift, Star, DollarSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -43,6 +43,7 @@ interface User {
   createdAt: string;
   referralCode: string | null;
   referrerId: string | null;
+  referralBalance?: number;
   referralsCount?: number;
   activeReferralsCount?: number;
   referrerInfo?: ReferrerInfo | null;
@@ -200,6 +201,14 @@ export default function AdminUsersPage() {
                                 <Gift size={16} className="text-primary" />
                                 <span className="text-xs font-semibold text-primary">
                                   Бесплатных месяцев: <strong>{user.activeReferralsCount}</strong>
+                                </span>
+                              </div>
+                            )}
+                            {user.referralBalance !== undefined && user.referralBalance > 0 && (
+                              <div className="flex items-center gap-2 px-2 py-1 rounded bg-green-500/10">
+                                <DollarSign size={16} className="text-green-400" />
+                                <span className="text-xs font-semibold text-green-400">
+                                  Реф. баланс: <strong>${user.referralBalance.toFixed(2)}</strong>
                                 </span>
                               </div>
                             )}

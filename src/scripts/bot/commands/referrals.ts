@@ -31,19 +31,33 @@ export async function handleReferrals(ctx: Context, dataSource: DataSource) {
     (r) => r.subscriptionStatus === 'active' && r.subscriptionEndsAt && new Date(r.subscriptionEndsAt) > new Date()
   ).length;
 
-  // Подсчитываем заработанные месяцы (по количеству оплативших)
   const earnedMonths = paidReferrals;
-  
-  // TODO: Добавить счетчик переходов по ссылке в БД (пока используем количество рефералов как приблизительное значение)
-  const linkClicks = referrals.length; // Временное значение
+  const balance = Number(user.referralBalance) || 0;
+
+  const REFERRAL_PROGRAM_END = new Date('2026-07-06T23:59:59Z');
+  const now2 = new Date();
+  const programActive = now2 < REFERRAL_PROGRAM_END;
+  const daysLeft = programActive
+    ? Math.ceil((REFERRAL_PROGRAM_END.getTime() - now2.getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
 
   let message = `🤝 Партнерская программа\n\n`;
-  message += `Приглашайте коллег и друзей! За каждого, кто оформит подписку, вы получите +1 месяц бесплатно.\n\n`;
+  message += `Приглашайте коллег и друзей!\n`;
+  message += `За каждого, кто оформит подписку:\n`;
+  message += `• +1 месяц бесплатной подписки\n`;
+  message += `• +50% от стоимости подписки на баланс\n\n`;
   message += `📊 Ваша статистика:\n`;
-  message += `👥 Переходов по ссылке: ${linkClicks}\n`;
-  message += `✅ Регистраций: ${referrals.length}\n`;
+  message += `👥 Регистраций: ${referrals.length}\n`;
   message += `💰 Оплативших: ${paidReferrals}\n`;
-  message += `🎁 Заработано месяцев: ${earnedMonths}\n\n`;
+  message += `🎁 Заработано месяцев: ${earnedMonths}\n`;
+  message += `💵 Баланс: $${balance.toFixed(2)}\n\n`;
+
+  if (programActive) {
+    message += `⏰ Программа действует ещё ${daysLeft} дн.\n\n`;
+  } else {
+    message += `⚠️ Программа завершена\n\n`;
+  }
+
   message += `🔗 Ваша ссылка:\n${referralLink}`;
 
   await ctx.reply(message, getReferralsKeyboard(referralLink));

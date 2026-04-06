@@ -95,6 +95,7 @@ export async function GET(request: NextRequest) {
 
     return {
       ...user,
+      referralBalance: Number(user.referralBalance) || 0,
       referralsCount: referrals.length,
       activeReferralsCount: activeSubscriptions,
       referrerInfo,

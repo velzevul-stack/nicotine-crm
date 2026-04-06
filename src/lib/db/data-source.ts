@@ -19,6 +19,8 @@ import {
   UserStatsEntity,
   SystemSettingsEntity,
   CardEntity,
+  CryptoPaymentEntity,
+  ReferralEarningEntity,
 } from './entities';
 import { ensureUserStatsForeignKey } from './ensure-user-stats-fk';
 
@@ -49,6 +51,8 @@ export const AppDataSource = new DataSource({
     UserStatsEntity,
     SystemSettingsEntity,
     CardEntity,
+    CryptoPaymentEntity,
+    ReferralEarningEntity,
   ],
   // В production Next запускает обычный Node: TypeORM пытался require() *.ts миграций → SyntaxError.
   // Миграции выполняйте отдельно: npm run db:migrate (tsx + отдельный DataSource в run-migrations.ts).

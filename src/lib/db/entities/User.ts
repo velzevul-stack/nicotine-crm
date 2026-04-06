@@ -13,6 +13,7 @@ export interface User {
   subscriptionEndsAt: Date | null;
   referralCode: string | null;
   referrerId: string | null;
+  referralBalance: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +35,7 @@ export const UserEntity = new EntitySchema<User>({
     subscriptionEndsAt: { type: Date, nullable: true },
     referralCode: { type: String, nullable: true, unique: true },
     referrerId: { type: String, nullable: true },
+    referralBalance: { type: 'decimal', precision: 10, scale: 2, default: 0 },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, createDate: true },
     updatedAt: { type: Date, updateDate: true },

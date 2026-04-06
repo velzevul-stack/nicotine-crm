@@ -16,3 +16,5 @@ export { PostFormatSuggestionEntity } from './PostFormatSuggestion';
 export { UserStatsEntity } from './UserStats';
 export { SystemSettingsEntity } from './SystemSettings';
 export { CardEntity } from './Card';
+export { CryptoPaymentEntity, type CryptoPayment } from './CryptoPayment';
+export { ReferralEarningEntity, type ReferralEarning } from './ReferralEarning';
