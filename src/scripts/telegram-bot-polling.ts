@@ -13,8 +13,10 @@ import dotenv from 'dotenv';
 import { Telegraf, Context } from 'telegraf';
 import { Client } from 'pg';
 import { DataSource, IsNull } from 'typeorm';
-import { UserEntity, PostFormatEntity, UserShopEntity, CryptoPaymentEntity, ReferralEarningEntity } from '@/lib/db/entities';
 import {
+  UserEntity,
+  PostFormatEntity,
+  UserShopEntity,
   ShopEntity,
   CategoryEntity,
   BrandEntity,
@@ -26,6 +28,11 @@ import {
   DebtEntity,
   DebtOperationEntity,
   PostFormatSuggestionEntity,
+  UserStatsEntity,
+  SystemSettingsEntity,
+  CardEntity,
+  CryptoPaymentEntity,
+  ReferralEarningEntity,
 } from '@/lib/db/entities';
 import { createInvoice, SUBSCRIPTION_PRICE_USD, SUBSCRIPTION_PRICE_STARS } from '@/lib/nowpayments';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
@@ -121,6 +128,11 @@ const dataSource = new DataSource({
     DebtOperationEntity,
     PostFormatEntity,
     PostFormatSuggestionEntity,
+    UserStatsEntity,
+    SystemSettingsEntity,
+    CardEntity,
+    CryptoPaymentEntity,
+    ReferralEarningEntity,
   ],
   migrations: ['src/lib/db/migrations/*.ts'],
   migrationsTableName: 'migrations',
