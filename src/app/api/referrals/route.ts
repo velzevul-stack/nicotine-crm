@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
+import { getTelegramBotUsername } from '@/lib/telegram/bot-username';
 import { UserEntity } from '@/lib/db/entities/User';
 import { ReferralEarningEntity } from '@/lib/db/entities/ReferralEarning';
 
@@ -30,7 +31,7 @@ export async function GET() {
     (r) => r.subscriptionStatus === 'active' && r.subscriptionEndsAt && new Date(r.subscriptionEndsAt) > now
   ).length;
 
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+  const botUsername = getTelegramBotUsername();
   const referralLink = user.referralCode 
     ? `https://t.me/${botUsername}?start=${user.referralCode}`
     : null;

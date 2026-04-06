@@ -1,6 +1,7 @@
 import { Context } from 'telegraf';
 import { DataSource } from 'typeorm';
 import { UserEntity } from '@/lib/db/entities';
+import { getTelegramBotUsername } from '@/lib/telegram/bot-username';
 import { getReferralsKeyboard } from '../keyboards/referrals';
 
 /**
@@ -19,7 +20,7 @@ export async function handleReferrals(ctx: Context, dataSource: DataSource) {
   // Находим всех рефералов этого пользователя
   const referrals = await userRepo.find({ where: { referrerId: user.id } });
   
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+  const botUsername = getTelegramBotUsername();
   const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
 
   // Подсчитываем статистику
@@ -76,7 +77,7 @@ export async function handleCopyReferralLink(ctx: Context, dataSource: DataSourc
     return;
   }
 
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+  const botUsername = getTelegramBotUsername();
   const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
 
   // Отправляем сообщение с ссылкой для быстрого копирования

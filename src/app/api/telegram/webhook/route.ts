@@ -30,6 +30,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { getTelegramMiniAppLoginUrl, getTelegramMiniAppRootUrl } from '@/lib/telegram/mini-app-urls';
+import { getTelegramBotUsername } from '@/lib/telegram/bot-username';
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 if (!botToken) {
@@ -734,7 +735,7 @@ bot.command('me', async (ctx) => {
   }
 
   if (user.referralCode) {
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+    const botUsername = getTelegramBotUsername();
     const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
     info += `\n\n🎁 Реферальная программа:\n`;
     info += `Ваш код: \`${user.referralCode}\`\n`;
@@ -1076,7 +1077,7 @@ bot.command('referrals', async (ctx) => {
   const referrals = await userRepo.find({ where: { referrerId: user.id } });
 
   if (referrals.length === 0) {
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+    const botUsername = getTelegramBotUsername();
     const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
     
     await ctx.reply(
@@ -1099,7 +1100,7 @@ bot.command('referrals', async (ctx) => {
   message += `Всего рефералов: ${referrals.length}\n`;
   message += `С активной подпиской: ${activeSubscriptions}\n\n`;
 
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+  const botUsername = getTelegramBotUsername();
   const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
   message += `Ваш реферальный код: \`${user.referralCode}\`\n`;
   message += `Ваша ссылка: ${referralLink}\n\n`;
@@ -1802,7 +1803,7 @@ bot.on('text', async (ctx) => {
     }
 
     if (user.referralCode) {
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+      const botUsername = getTelegramBotUsername();
       const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
       info += `\n\n🎁 Реферальная программа:\n`;
       info += `Ваш код: \`${user.referralCode}\`\n`;
@@ -1943,7 +1944,7 @@ bot.on('text', async (ctx) => {
     const referrals = await userRepo.find({ where: { referrerId: user.id } });
 
     if (referrals.length === 0) {
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+      const botUsername = getTelegramBotUsername();
       const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
       
       await ctx.reply(
@@ -1965,7 +1966,7 @@ bot.on('text', async (ctx) => {
     message += `Всего рефералов: ${referrals.length}\n`;
     message += `С активной подпиской: ${activeSubscriptions}\n\n`;
 
-    const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'your_bot';
+    const botUsername = getTelegramBotUsername();
     const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
     message += `Ваш реферальный код: \`${user.referralCode}\`\n`;
     message += `Ваша ссылка: ${referralLink}\n\n`;

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Crown, Clock, X } from 'lucide-react';
+import { getTelegramBotUsernamePublic } from '@/lib/telegram/bot-username';
 
 interface TrialBannerProps {
   subscriptionStatus: string;
@@ -20,6 +21,7 @@ export function TrialBanner({
 
   if (isAdmin || dismissed) return null;
 
+  const subscribeBotUrl = `https://t.me/${getTelegramBotUsernamePublic()}?start=subscribe`;
   const now = new Date();
 
   if (subscriptionStatus === 'trial' && trialEndsAt) {
@@ -34,7 +36,7 @@ export function TrialBanner({
             Пробный период закончился. Оформите подписку для продолжения работы.
           </p>
           <a
-            href="https://t.me/PostStockProBot?start=subscribe"
+            href={subscribeBotUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
@@ -58,7 +60,7 @@ export function TrialBanner({
           Пробный период: <strong>{daysLeft}</strong> {daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'} осталось. Оформите подписку!
         </p>
         <a
-          href="https://t.me/PostStockProBot?start=subscribe"
+          href={subscribeBotUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors"
@@ -83,7 +85,7 @@ export function TrialBanner({
           Пробный период закончился. Оформите подписку для продолжения работы.
         </p>
         <a
-          href="https://t.me/PostStockProBot?start=subscribe"
+          href={subscribeBotUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"

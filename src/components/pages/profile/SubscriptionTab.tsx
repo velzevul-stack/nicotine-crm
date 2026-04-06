@@ -6,6 +6,7 @@ import { api } from '@/lib/api-client';
 import { Calendar, Crown, Gift, Star, AlertCircle, CheckCircle2, Clock, Bitcoin, ExternalLink, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { getTelegramBotUsernamePublic } from '@/lib/telegram/bot-username';
 
 interface SubscriptionInfo {
   subscriptionStatus: 'trial' | 'active' | 'expired';
@@ -73,7 +74,7 @@ export function SubscriptionTab() {
 
   const referralLink = referralsData?.referralLink ||
     (subscriptionInfo.referralCode
-      ? `https://t.me/your_bot?start=${subscriptionInfo.referralCode}`
+      ? `https://t.me/${getTelegramBotUsernamePublic()}?start=${subscriptionInfo.referralCode}`
       : null);
 
   const needsSubscription = isExpired || (isTrial && isTrialExpired) || (!isActive);
