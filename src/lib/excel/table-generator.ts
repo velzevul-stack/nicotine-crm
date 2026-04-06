@@ -361,7 +361,8 @@ export async function generateStockTable(
         if (fs.existsSync(resolvedPath)) {
           try {
             const ext = path.extname(resolvedPath).toLowerCase();
-            const extension: 'png' | 'jpeg' | 'gif' = ext === '.png' ? 'png' : ext === '.webp' ? 'jpeg' : 'jpeg';
+            if (ext !== '.png' && ext !== '.jpg' && ext !== '.jpeg') continue;
+            const extension: 'png' | 'jpeg' = ext === '.png' ? 'png' : 'jpeg';
             const imageId = wb.addImage({
               filename: resolvedPath,
               extension,
@@ -410,11 +411,6 @@ function getImageDimensions(filePath: string): { width: number; height: number }
           const len = buf.readUInt16BE(i + 2);
           i += 2 + len;
         }
-      }
-    } else if (ext === '.webp' && buf.length >= 30) {
-      if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
-        w = buf.readUInt32LE(24);
-        h = buf.readUInt32LE(28);
       }
     }
     if (w > 0 && h > 0) {

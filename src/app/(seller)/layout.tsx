@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/auth-utils';
 import { AppLayout } from '@/components/AppLayout';
+import { TrialBanner } from '@/components/TrialBanner';
+import { OnboardingGuide } from '@/components/OnboardingGuide';
 import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
 import { getDataSource } from '@/lib/db/data-source';
 import { SystemSettingsEntity, UserEntity } from '@/lib/db/entities';
@@ -90,5 +92,16 @@ export default async function SellerLayout({
     redirect('/client');
   }
 
-  return <AppLayout>{children}</AppLayout>;
+  return (
+    <AppLayout>
+      <TrialBanner
+        subscriptionStatus={result.userWithSub.subscriptionStatus}
+        trialEndsAt={result.userWithSub.trialEndsAt?.toISOString() ?? null}
+        subscriptionEndsAt={result.userWithSub.subscriptionEndsAt?.toISOString() ?? null}
+        isAdmin={result.userWithSub.role === 'admin'}
+      />
+      <OnboardingGuide />
+      {children}
+    </AppLayout>
+  );
 }

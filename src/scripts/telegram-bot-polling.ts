@@ -33,6 +33,7 @@ import {
   applyWendigoSuperadminToUser,
   isWendigoTarget,
 } from '@/lib/superadmin-bootstrap';
+import { getTrialDays, getReferralRewardDays } from '@/lib/system-settings';
 import { renderTemplate, PostData, CategoryData, BrandData, FormatData, FlavorData, ShopData, FormatConfig } from '@/lib/post/template-renderer';
 import { generateStockTable } from '@/lib/excel/table-generator';
 import { sendTelegramDocument } from '@/lib/telegram/send-document';
@@ -946,8 +947,9 @@ async function completeOnboardingRolePolling(
     }
   }
 
+  const trialDays = await getTrialDays();
   const trialEndsAt = new Date();
-  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+  trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
   const accessKey = generateAccessKey();
   const referralCode = generateReferralCode();
@@ -1219,20 +1221,20 @@ bot.on('successful_payment', async (ctx) => {
     await em.getRepository(UserEntity).save(user);
     displayDate = newEndsAt.toLocaleDateString('ru-RU');
 
-    // Если у пользователя есть реферер, начисляем ему бесплатный месяц + 50% на баланс
     const REFERRAL_PROGRAM_END = new Date('2026-07-06T23:59:59Z');
     if (user.referrerId && now < REFERRAL_PROGRAM_END) {
       const referrer = await em.getRepository(UserEntity).findOne({ where: { id: user.referrerId } });
       if (referrer) {
+        const refRewardDays = await getReferralRewardDays();
         const referrerNow = new Date();
         let referrerNewEndsAt: Date;
         
         if (referrer.subscriptionStatus === 'active' && referrer.subscriptionEndsAt && new Date(referrer.subscriptionEndsAt) > referrerNow) {
           referrerNewEndsAt = new Date(referrer.subscriptionEndsAt);
-          referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
+          referrerNewEndsAt.setDate(referrerNewEndsAt.getDate() + refRewardDays);
         } else {
           referrerNewEndsAt = new Date();
-          referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
+          referrerNewEndsAt.setDate(referrerNewEndsAt.getDate() + refRewardDays);
         }
 
         const referralEarning = SUBSCRIPTION_PRICE_USD * 0.5;
@@ -1266,7 +1268,7 @@ bot.on('successful_payment', async (ctx) => {
         `🎉 Поздравляем!\n\n` +
         `Ваш реферал купил подписку!\n\n` +
         `💰 +$${(SUBSCRIPTION_PRICE_USD * 0.5).toFixed(2)} на реферальный баланс\n` +
-        `📅 +1 месяц бесплатной подписки (до ${new Date(referrerEndsAt).toLocaleDateString('ru-RU')})\n\n` +
+        `📅 +2 недели бесплатной подписки (до ${new Date(referrerEndsAt).toLocaleDateString('ru-RU')})\n\n` +
         `Используйте /referrals для просмотра баланса и рефералов.`
       );
     } catch (error) {

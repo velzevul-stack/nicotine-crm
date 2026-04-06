@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/PageHeader';
+import { Clock, Gift } from 'lucide-react';
 
 export default function AdminSettingsPage() {
   const { toast } = useToast();
@@ -18,7 +19,15 @@ export default function AdminSettingsPage() {
       api<{ supportTelegramUsername: string | null }>('/api/shop'),
   });
 
+  const { data: systemSettings } = useQuery({
+    queryKey: ['admin-system-settings'],
+    queryFn: () =>
+      api<{ trialDays: number; referralRewardDays: number }>('/api/admin/settings'),
+  });
+
   const [telegramUsername, setTelegramUsername] = useState('');
+  const [trialDays, setTrialDays] = useState('7');
+  const [referralRewardDays, setReferralRewardDays] = useState('14');
 
   useEffect(() => {
     if (shopData) {
@@ -26,7 +35,14 @@ export default function AdminSettingsPage() {
     }
   }, [shopData]);
 
-  const updateMutation = useMutation({
+  useEffect(() => {
+    if (systemSettings) {
+      setTrialDays(String(systemSettings.trialDays));
+      setReferralRewardDays(String(systemSettings.referralRewardDays));
+    }
+  }, [systemSettings]);
+
+  const updateShopMutation = useMutation({
     mutationFn: (username: string | null) =>
       api<{ supportTelegramUsername: string | null }>('/api/shop', {
         method: 'PATCH',
@@ -37,7 +53,6 @@ export default function AdminSettingsPage() {
       queryClient.setQueryData(['shop'], data);
       queryClient.invalidateQueries({ queryKey: ['admin-shop'] });
       queryClient.invalidateQueries({ queryKey: ['shop'] });
-      // Обновляем локальное состояние
       setTelegramUsername(data.supportTelegramUsername?.replace('@', '') || '');
       toast({ title: 'Настройки сохранены', description: 'Telegram-ник обновлён' });
     },
@@ -50,17 +65,52 @@ export default function AdminSettingsPage() {
     },
   });
 
-  const handleSave = () => {
+  const updateSystemMutation = useMutation({
+    mutationFn: (data: { trialDays?: number; referralRewardDays?: number }) =>
+      api<{ trialDays: number; referralRewardDays: number }>('/api/admin/settings', {
+        method: 'PATCH',
+        body: data,
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['admin-system-settings'], data);
+      setTrialDays(String(data.trialDays));
+      setReferralRewardDays(String(data.referralRewardDays));
+      toast({ title: 'Настройки сохранены', description: 'Системные настройки обновлены' });
+    },
+    onError: (err: any) => {
+      toast({
+        title: 'Ошибка',
+        description: err.message || 'Не удалось сохранить настройки',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleSaveShop = () => {
     const username = telegramUsername.trim();
     const finalUsername = username ? (username.startsWith('@') ? username : `@${username}`) : null;
-    updateMutation.mutate(finalUsername);
+    updateShopMutation.mutate(finalUsername);
+  };
+
+  const handleSaveSystem = () => {
+    const td = parseInt(trialDays, 10);
+    const rd = parseInt(referralRewardDays, 10);
+    if (!td || td < 1 || td > 90) {
+      toast({ title: 'Ошибка', description: 'Триал: от 1 до 90 дней', variant: 'destructive' });
+      return;
+    }
+    if (!rd || rd < 1 || rd > 90) {
+      toast({ title: 'Ошибка', description: 'Бонус за реферала: от 1 до 90 дней', variant: 'destructive' });
+      return;
+    }
+    updateSystemMutation.mutate({ trialDays: td, referralRewardDays: rd });
   };
 
   return (
     <>
       <PageHeader title="Настройки" subtitle="Управление настройками системы" />
       
-      <div className="max-w-2xl">
+      <div className="max-w-2xl space-y-6">
         <div className="glass-card rounded-xl p-6 space-y-4">
           <div>
             <label className="text-sm font-medium mb-2 block">
@@ -93,11 +143,61 @@ export default function AdminSettingsPage() {
           </div>
 
           <Button
-            onClick={handleSave}
-            disabled={updateMutation.isPending}
+            onClick={handleSaveShop}
+            disabled={updateShopMutation.isPending}
             className="w-full"
           >
-            {updateMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+            {updateShopMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+          </Button>
+        </div>
+
+        <div className="glass-card rounded-xl p-6 space-y-5">
+          <h3 className="text-base font-semibold text-foreground">Подписка и реферальная программа</h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-1.5 flex items-center gap-2">
+                <Clock size={15} className="text-blue-400" />
+                Пробный период (дней)
+              </label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Сколько дней бесплатного доступа для новых пользователей
+              </p>
+              <Input
+                type="number"
+                min={1}
+                max={90}
+                value={trialDays}
+                onChange={(e) => setTrialDays(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1.5 flex items-center gap-2">
+                <Gift size={15} className="text-green-400" />
+                Бонус за реферала (дней)
+              </label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Сколько дней подписки начисляется рефереру за оплативших пользователей
+              </p>
+              <Input
+                type="number"
+                min={1}
+                max={90}
+                value={referralRewardDays}
+                onChange={(e) => setReferralRewardDays(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={handleSaveSystem}
+            disabled={updateSystemMutation.isPending}
+            className="w-full"
+          >
+            {updateSystemMutation.isPending ? 'Сохранение...' : 'Сохранить настройки'}
           </Button>
         </div>
       </div>

@@ -146,8 +146,50 @@ export async function PATCH(request: NextRequest) {
   if (typeof updates.isActive === 'boolean') {
     user.isActive = updates.isActive;
   }
+  if (typeof updates.referralBalance === 'number') {
+    user.referralBalance = updates.referralBalance;
+  }
 
   await userRepo.save(user);
 
   return NextResponse.json({ success: true, user });
+}
+
+export async function DELETE(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+
+  const userWithSub = await checkUserSubscription(session.userId);
+  if (!userWithSub || userWithSub.role !== 'admin') {
+    return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+  }
+
+  const { userId } = await request.json();
+
+  if (!userId) {
+    return NextResponse.json({ message: 'userId required' }, { status: 400 });
+  }
+
+  if (userId === session.userId) {
+    return NextResponse.json({ message: 'Cannot delete yourself' }, { status: 400 });
+  }
+
+  const ds = await getDataSource();
+
+  await ds.transaction(async (em) => {
+    await em.query('DELETE FROM sale_items WHERE "saleId" IN (SELECT id FROM sales WHERE "sellerId" = $1)', [userId]);
+    await em.query('DELETE FROM sales WHERE "sellerId" = $1', [userId]);
+    await em.query('DELETE FROM debt_operations WHERE "debtId" IN (SELECT id FROM debts WHERE "shopId" IN (SELECT "shopId" FROM user_shops WHERE "userId" = $1))', [userId]);
+    await em.query('DELETE FROM debts WHERE "shopId" IN (SELECT "shopId" FROM user_shops WHERE "userId" = $1)', [userId]);
+    await em.query('DELETE FROM user_stats WHERE "userId" = $1', [userId]);
+    await em.query('DELETE FROM user_shops WHERE "userId" = $1', [userId]);
+    await em.query('DELETE FROM referral_earnings WHERE "referrerId" = $1 OR "referralId" = $1', [userId]);
+    await em.query('DELETE FROM crypto_payments WHERE "userId" = $1', [userId]);
+    await em.query('UPDATE users SET "referrerId" = NULL WHERE "referrerId" = $1', [userId]);
+    await em.query('DELETE FROM users WHERE id = $1', [userId]);
+  });
+
+  return NextResponse.json({ success: true });
 }

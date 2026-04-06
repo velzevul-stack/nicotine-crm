@@ -11,6 +11,7 @@ import {
   applyWendigoSuperadminToUser,
   isWendigoTarget,
 } from '@/lib/superadmin-bootstrap';
+import { getTrialDays } from '@/lib/system-settings';
 
 type ParsedTelegramInit = {
   telegramId: string;
@@ -75,9 +76,9 @@ export async function POST(request: NextRequest) {
     let user = await userRepo.findOne({ where: { telegramId: parsed.telegramId } });
 
     if (!user) {
-      // Создаем пользователя с триалом (по умолчанию seller, если не указано иное)
+      const trialDays = await getTrialDays();
       const trialEndsAt = new Date();
-      trialEndsAt.setDate(trialEndsAt.getDate() + 14); // 14 дней триала
+      trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
       const accessKey = generateAccessKey();
       const referralCode = generateReferralCode();

@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Ban, CheckCircle, Calendar as CalendarIcon, Users, Gift, Star, DollarSign } from 'lucide-react';
+import { Search, Ban, CheckCircle, Calendar as CalendarIcon, Users, Gift, Star, DollarSign, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -86,6 +86,31 @@ export default function AdminUsersPage() {
 
   const handleToggleActive = (user: User) => {
     updateUserMutation.mutate({ userId: user.id, updates: { isActive: !user.isActive } });
+  };
+
+  const handleCashoutBalance = (userId: string) => {
+    if (!window.confirm('Списать реферальный баланс пользователя?')) return;
+    updateUserMutation.mutate({ userId, updates: { referralBalance: 0 } });
+  };
+
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: string) =>
+      api('/api/admin/users', {
+        method: 'DELETE',
+        body: { userId },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      toast({ title: 'Пользователь удален' });
+    },
+    onError: () => {
+      toast({ title: 'Ошибка удаления', variant: 'destructive' });
+    },
+  });
+
+  const handleDeleteUser = (user: User) => {
+    if (!window.confirm(`Удалить пользователя ${user.firstName || ''} ${user.lastName || ''} (@${user.username || user.telegramId})? Все данные будут удалены безвозвратно!`)) return;
+    deleteUserMutation.mutate(user.id);
   };
 
   const handleUpdateTrialDate = (userId: string, date: Date | undefined) => {
@@ -210,6 +235,14 @@ export default function AdminUsersPage() {
                                 <span className="text-xs font-semibold text-green-400">
                                   Реф. баланс: <strong>${user.referralBalance.toFixed(2)}</strong>
                                 </span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs text-green-400 border-green-500/30 hover:bg-green-500/20"
+                                  onClick={() => handleCashoutBalance(user.id)}
+                                >
+                                  Списать
+                                </Button>
                               </div>
                             )}
                           </div>
@@ -346,6 +379,15 @@ export default function AdminUsersPage() {
                           Разбанить
                         </>
                       )}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteUser(user)}
+                      disabled={deleteUserMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Удалить
                     </Button>
                   </div>
                 </div>

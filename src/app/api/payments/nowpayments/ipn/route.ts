@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { UserEntity, CryptoPaymentEntity, ReferralEarningEntity } from '@/lib/db/entities';
 import { verifyIpnSignature, SUBSCRIPTION_PRICE_USD, type IpnPayload } from '@/lib/nowpayments';
+import { getReferralRewardDays } from '@/lib/system-settings';
 import { Telegraf } from 'telegraf';
 
 const REFERRAL_PROGRAM_END = new Date('2026-07-06T23:59:59Z');
@@ -90,14 +91,15 @@ export async function POST(request: NextRequest) {
         const currentBalance = Number(referrer.referralBalance) || 0;
         referrer.referralBalance = currentBalance + referralEarningAmount;
 
+        const refRewardDays = await getReferralRewardDays();
         const referrerNow = new Date();
         let referrerNewEndsAt: Date;
         if (referrer.subscriptionStatus === 'active' && referrer.subscriptionEndsAt && new Date(referrer.subscriptionEndsAt) > referrerNow) {
           referrerNewEndsAt = new Date(referrer.subscriptionEndsAt);
-          referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
+          referrerNewEndsAt.setDate(referrerNewEndsAt.getDate() + refRewardDays);
         } else {
           referrerNewEndsAt = new Date();
-          referrerNewEndsAt.setMonth(referrerNewEndsAt.getMonth() + 1);
+          referrerNewEndsAt.setDate(referrerNewEndsAt.getDate() + refRewardDays);
         }
 
         referrer.subscriptionStatus = 'active';
@@ -143,7 +145,7 @@ export async function POST(request: NextRequest) {
           `🎉 Поздравляем!\n\n` +
           `Ваш реферал оплатил подписку криптой!\n\n` +
           `💰 Вам начислено: $${referralEarningAmount.toFixed(2)} на реферальный баланс\n` +
-          `📅 + 1 месяц бесплатной подписки (до ${new Date(referrerEndsAt).toLocaleDateString('ru-RU')})\n\n` +
+          `📅 + 2 недели бесплатной подписки (до ${new Date(referrerEndsAt).toLocaleDateString('ru-RU')})\n\n` +
           `Используйте /referrals для просмотра баланса.`
         );
       }

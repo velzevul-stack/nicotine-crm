@@ -87,7 +87,8 @@ export function Dashboard() {
     }
     for (const sale of sales) {
       if (sale.isReservation) continue;
-      const hour = new Date(sale.datetime).getHours();
+      const hourStr = formatInTimeZone(new Date(sale.datetime), shopTz, 'H');
+      const hour = parseInt(hourStr, 10);
       const entry = byHour.get(hour)!;
       entry.receipts += 1;
       entry.items += (sale.items ?? []).reduce((s, i) => s + (i.quantity ?? 0), 0);
@@ -100,9 +101,9 @@ export function Dashboard() {
   })();
 
   const todayValue =
-    today.revenue >= 1000 ? `${Math.floor(today.revenue / 1000)}k` : String(today.revenue);
+    today.revenue >= 10000 ? `${(today.revenue / 1000).toFixed(1)}k` : String(Math.round(today.revenue));
   const debtValue =
-    totalDebt >= 1000 ? `${Math.floor(totalDebt / 1000)}k` : String(totalDebt);
+    totalDebt >= 10000 ? `${(totalDebt / 1000).toFixed(1)}k` : String(Math.round(totalDebt));
 
   return (
     <>

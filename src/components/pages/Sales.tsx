@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Search, Plus, Minus, X, ShoppingCart, CreditCard, Banknote, Wallet, ChevronRight, ArrowLeft, Clock } from 'lucide-react';
@@ -210,6 +210,14 @@ export function Sales() {
   const discountAmount = Math.min(discountInput, subtotal); // Скидка не может быть больше стоимости
   const deliveryAmount = Math.max(0, delivery ? parseFloat(delivery) || 0 : 0);
   const total = Math.max(0, subtotal - discountAmount + deliveryAmount);
+
+  useEffect(() => {
+    if (paymentType === 'split') {
+      setSplitCash(String(total));
+      setSplitCard('0');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
 
   const handleSubmit = () => {
     if (cart.length === 0) {
