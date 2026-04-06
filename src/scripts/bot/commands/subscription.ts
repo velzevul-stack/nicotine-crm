@@ -44,7 +44,7 @@ export async function handleSubscription(ctx: Context, dataSource: DataSource) {
   }
 
   subscriptionText += `\n\nВыберите способ оплаты:`;
-  await ctx.reply(subscriptionText, getSubscriptionKeyboard());
+  await ctx.reply(subscriptionText, { reply_markup: getSubscriptionKeyboard() });
 }
 
 /**

@@ -61,7 +61,7 @@ export async function handleReferrals(ctx: Context, dataSource: DataSource) {
 
   message += `🔗 Ваша ссылка:\n${referralLink}`;
 
-  await ctx.reply(message, getReferralsKeyboard(referralLink));
+  await ctx.reply(message, { reply_markup: getReferralsKeyboard(referralLink) });
 }
 
 /**
