@@ -32,8 +32,10 @@ export function setupErrorHandler(bot: any) {
 
     // Специальная обработка ошибок БД
     if (err.code === '28P01') {
-      console.error('\n💡 Ошибка аутентификации PostgreSQL!');
-      console.error('   Проверьте правильность пароля в файле .env');
+      console.error('\n💡 Ошибка аутентификации PostgreSQL (неверный пароль или пользователь).');
+      console.error('   Проверьте DB_USER и DB_PASSWORD в .env на этом сервере (тот же файл, что читает PM2).');
+      console.error('   Если в значении были лишние кавычки — уберите их или обновите приложение (нормализация пароля).');
+      console.error('   Проверка: psql -h DB_HOST -U DB_USER -d DB_NAME');
     } else if (err.code === 'ECONNREFUSED') {
       console.error('\n💡 Не удалось подключиться к PostgreSQL!');
       console.error('   Убедитесь, что PostgreSQL запущен и доступен.');

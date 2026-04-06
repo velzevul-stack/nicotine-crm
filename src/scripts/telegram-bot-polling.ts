@@ -70,6 +70,8 @@ import {
 import { getSubscriptionKeyboard } from './bot/keyboards/subscription';
 import { getOnboardingKeyboard } from './bot/keyboards/onboarding';
 import { setupErrorHandler } from './bot/utils/error-handler';
+import { parseRequiredDbPassword } from '@/lib/env/db-password';
+import { resolveDbHost } from '@/lib/env/db-host';
 
 // Загружаем переменные окружения из .env файла (с перезаписью существующих)
 dotenv.config({ override: true });
@@ -82,10 +84,10 @@ if (!botToken) {
 }
 
 // Проверяем переменные для подключения к БД
-const dbHost = (process.env.DB_HOST || 'localhost').trim();
+const dbHost = resolveDbHost();
 const dbPort = (process.env.DB_PORT || '5432').trim();
 const dbUser = (process.env.DB_USER || 'postgres').trim();
-const dbPassword = process.env.DB_PASSWORD ? process.env.DB_PASSWORD.trim() : null;
+const dbPassword = parseRequiredDbPassword();
 const dbName = (process.env.DB_NAME || 'telegram_seller').trim();
 
 if (!dbPassword) {
@@ -3240,8 +3242,9 @@ async function startBot() {
       console.error(`      Сообщение: ${pgError.message || pgError.toString()}`);
       
       if (pgError.code === '28P01') {
-        console.error('\n💡 Ошибка аутентификации PostgreSQL!');
-        console.error('   Проверьте правильность пароля в файле .env');
+        console.error('\n💡 Ошибка аутентификации PostgreSQL (неверный пароль или пользователь).');
+        console.error('   Проверьте DB_USER и DB_PASSWORD в .env на этом сервере.');
+        console.error('   Проверка: psql -h DB_HOST -U DB_USER -d DB_NAME');
       } else if (pgError.code === 'ECONNREFUSED') {
         console.error('\n💡 Не удалось подключиться к PostgreSQL!');
         console.error('   Убедитесь, что PostgreSQL запущен и доступен.');

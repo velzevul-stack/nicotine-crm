@@ -23,13 +23,15 @@ import {
   ReferralEarningEntity,
 } from './entities';
 import { ensureUserStatsForeignKey } from './ensure-user-stats-fk';
+import { resolveDbPasswordForTypeorm } from '@/lib/env/db-password';
+import { resolveDbHost } from '@/lib/env/db-host';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
-  host: process.env.DB_HOST ?? 'localhost',
+  host: resolveDbHost(),
   port: parseInt(process.env.DB_PORT ?? '5432', 10),
   username: process.env.DB_USER ?? 'postgres',
-  password: process.env.DB_PASSWORD ?? 'postgres',
+  password: resolveDbPasswordForTypeorm(),
   database: process.env.DB_NAME ?? 'telegram_seller',
   synchronize: process.env.NODE_ENV === 'development',
   logging: process.env.NODE_ENV === 'development',
@@ -114,10 +116,10 @@ export async function getDataSource(): Promise<DataSource> {
           // Создаём временное соединение для исправления
           const tempDs = new DataSource({
             type: 'postgres',
-            host: process.env.DB_HOST ?? 'localhost',
+            host: resolveDbHost(),
             port: parseInt(process.env.DB_PORT ?? '5432', 10),
             username: process.env.DB_USER ?? 'postgres',
-            password: process.env.DB_PASSWORD ?? 'postgres',
+            password: resolveDbPasswordForTypeorm(),
             database: process.env.DB_NAME ?? 'telegram_seller',
             synchronize: false,
             logging: false,
