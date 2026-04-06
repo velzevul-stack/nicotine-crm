@@ -5,8 +5,12 @@ import { SUBSCRIPTION_PRICE_STARS } from '@/lib/nowpayments';
  * Инвойс в Telegram Stars (XTR). Для Stars обязательно provider_token: '' (см. Bot API sendInvoice).
  */
 export function buildStarsSubscriptionInvoice(userId: string) {
-  const cancelKeyboard: InlineKeyboardMarkup = {
-    inline_keyboard: [[{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }]],
+  // Bot API: если reply_markup задан, первая кнопка в первой строке — обязательно Pay (иначе 400).
+  const invoiceKeyboard: InlineKeyboardMarkup = {
+    inline_keyboard: [
+      [{ text: `Оплатить ${SUBSCRIPTION_PRICE_STARS} ⭐`, pay: true }],
+      [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
+    ],
   };
 
   return {
@@ -22,6 +26,6 @@ export function buildStarsSubscriptionInvoice(userId: string) {
         amount: SUBSCRIPTION_PRICE_STARS,
       },
     ],
-    reply_markup: cancelKeyboard,
+    reply_markup: invoiceKeyboard,
   };
 }
