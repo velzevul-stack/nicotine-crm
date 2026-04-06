@@ -2,7 +2,7 @@ import { Context } from 'telegraf';
 import { DataSource } from 'typeorm';
 import { UserEntity } from '@/lib/db/entities';
 import { getSubscriptionKeyboard } from '../keyboards/subscription';
-import { SUBSCRIPTION_PRICE_STARS } from '@/lib/nowpayments';
+import { buildStarsSubscriptionInvoice } from '@/lib/telegram/stars-subscription-invoice';
 
 /**
  * Команда /subscribe - красивое меню подписки с описанием тарифов
@@ -43,6 +43,7 @@ export async function handleSubscription(ctx: Context, dataSource: DataSource) {
     subscriptionText += `Статус: Не активна`;
   }
 
+  subscriptionText += `\n\nВыберите способ оплаты:`;
   await ctx.reply(subscriptionText, getSubscriptionKeyboard());
 }
 
@@ -70,24 +71,11 @@ export async function handleBuySubscription(ctx: Context, dataSource: DataSource
     return;
   }
 
-  const subscriptionPriceStars = SUBSCRIPTION_PRICE_STARS;
-
+  await ctx.answerCbQuery();
   try {
-    await ctx.replyWithInvoice({
-      title: 'Подписка PRO на 1 месяц',
-      description: `Подписка на сервис Post Stock Pro (${subscriptionPriceStars} ⭐). После покупки ваш пригласивший (если есть) получит бонус!`,
-      payload: `subscription_${user.id}_${Date.now()}`,
-      provider_data: JSON.stringify({ userId: user.id }),
-      currency: 'XTR', // Telegram Stars
-      prices: [{ label: `Подписка PRO на 1 месяц (${subscriptionPriceStars} ⭐)`, amount: subscriptionPriceStars }],
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
-        ],
-      },
-    });
+    await ctx.replyWithInvoice(buildStarsSubscriptionInvoice(user.id));
   } catch (error) {
     console.error('Error sending invoice:', error);
-    await ctx.answerCbQuery('❌ Ошибка при создании счёта. Попробуйте позже.');
+    await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже или оплатите криптой.');
   }
 }

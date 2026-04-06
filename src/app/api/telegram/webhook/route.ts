@@ -30,6 +30,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { getTelegramMiniAppLoginUrl, getTelegramMiniAppRootUrl } from '@/lib/telegram/mini-app-urls';
+import { buildStarsSubscriptionInvoice } from '@/lib/telegram/stars-subscription-invoice';
 import { getTelegramBotUsername } from '@/lib/telegram/bot-username';
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -835,25 +836,12 @@ bot.action(['subscription_buy_stars', 'subscription_buy_pro'], async (ctx) => {
     return;
   }
 
-  const subscriptionPriceStars = SUBSCRIPTION_PRICE_STARS;
-
+  await ctx.answerCbQuery();
   try {
-    await ctx.replyWithInvoice({
-      title: 'Подписка PRO на 1 месяц',
-      description: `Подписка на сервис Post Stock Pro (${subscriptionPriceStars} ⭐). После покупки ваш пригласивший (если есть) получит бонус!`,
-      payload: `subscription_${user.id}_${Date.now()}`,
-      provider_data: JSON.stringify({ userId: user.id }),
-      currency: 'XTR',
-      prices: [{ label: `Подписка PRO на 1 месяц (${subscriptionPriceStars} ⭐)`, amount: subscriptionPriceStars }],
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '❌ Отмена', callback_data: 'subscribe_cancel' }],
-        ],
-      },
-    } as any);
+    await ctx.replyWithInvoice(buildStarsSubscriptionInvoice(user.id));
   } catch (error) {
     console.error('Error sending invoice:', error);
-    await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже.');
+    await ctx.reply('❌ Ошибка при создании счёта. Попробуйте позже или оплатите криптой.');
   }
 });
 

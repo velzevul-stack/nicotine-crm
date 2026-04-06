@@ -253,8 +253,9 @@ async function checkAndSendTrialEndNotification(telegramId: string, userId: numb
       await bot.telegram.sendMessage(userId, message, {
         reply_markup: {
           inline_keyboard: [
-            [{ text: '💳 Купить подписку', callback_data: 'subscription_buy_pro' }],
-            [{ text: '👤 Мой профиль', callback_data: 'profile_subscription' }],
+            [{ text: `⭐ Stars (${SUBSCRIPTION_PRICE_STARS} ⭐)`, callback_data: 'subscription_buy_stars' }],
+            [{ text: `₿ Крипта $${SUBSCRIPTION_PRICE_USD}`, callback_data: 'subscription_buy_crypto' }],
+            [{ text: '💳 Все способы /subscribe', callback_data: 'profile_subscription' }],
           ],
         },
       });
@@ -1968,6 +1969,7 @@ bot.on('text', async (ctx) => {
 // Обработка callback для профиля
 bot.action('profile_subscription', async (ctx) => {
   console.log('[Bot] Callback: profile_subscription from user:', ctx.from.id);
+  await ctx.answerCbQuery();
   const ds = await getDataSource();
   await handleSubscription(ctx, ds);
 });
@@ -2066,8 +2068,8 @@ bot.action('back_to_menu', async (ctx) => {
   await ctx.reply('📱 Главное меню:', { reply_markup });
 });
 
-// Обработка callback для подписки
-bot.action('subscription_buy_pro', async (ctx) => {
+// Stars + совместимость со старым callback_data
+bot.action(['subscription_buy_stars', 'subscription_buy_pro'], async (ctx) => {
   const ds = await getDataSource();
   await handleBuySubscription(ctx, ds);
 });

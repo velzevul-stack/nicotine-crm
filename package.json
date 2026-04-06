@@ -21,6 +21,7 @@
     "make-admin": "tsx src/scripts/make-admin.ts",
     "check-key": "tsx src/scripts/check-access-key.ts",
     "bot:polling": "tsx src/scripts/telegram-bot-polling.ts",
+    "test:stars-invoice": "tsx src/scripts/test-telegram-stars-invoice.ts",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop telegram-seller",
     "pm2:restart": "pm2 restart telegram-seller"
