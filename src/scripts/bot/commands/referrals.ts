@@ -46,7 +46,7 @@ export async function handleReferrals(ctx: Context, dataSource: DataSource) {
   message += `Приглашайте коллег и друзей!\n`;
   message += `За каждого, кто оформит подписку:\n`;
   message += `• +1 месяц бесплатной подписки\n`;
-  message += `• +50% от стоимости подписки на баланс\n\n`;
+  message += `• +4$ на реферальный баланс\n\n`;
   message += `📊 Ваша статистика:\n`;
   message += `👥 Регистраций: ${referrals.length}\n`;
   message += `💰 Оплативших: ${paidReferrals}\n`;
