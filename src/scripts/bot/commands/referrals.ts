@@ -80,10 +80,9 @@ export async function handleCopyReferralLink(ctx: Context, dataSource: DataSourc
   const botUsername = getTelegramBotUsername();
   const referralLink = `https://t.me/${botUsername}?start=${user.referralCode}`;
 
-  // Отправляем сообщение с ссылкой для быстрого копирования
+  // Без Markdown: в ссылке может быть "_" (напр. nicotinecrm_bot) — legacy Markdown ломает разбор сущностей.
   await ctx.answerCbQuery('✅ Ссылка скопирована');
   await ctx.reply(
-    `🔗 Ваша реферальная ссылка:\n\n${referralLink}\n\n*Нажмите на ссылку для копирования*`,
-    { parse_mode: 'Markdown' }
+    `🔗 Ваша реферальная ссылка:\n\n${referralLink}\n\nНажмите на ссылку, чтобы скопировать.`
   );
 }
