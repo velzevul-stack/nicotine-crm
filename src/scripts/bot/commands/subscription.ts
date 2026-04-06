@@ -2,6 +2,7 @@ import { Context } from 'telegraf';
 import { DataSource } from 'typeorm';
 import { UserEntity } from '@/lib/db/entities';
 import { getSubscriptionKeyboard } from '../keyboards/subscription';
+import { SUBSCRIPTION_PRICE_STARS } from '@/lib/nowpayments';
 
 /**
  * Команда /subscribe - красивое меню подписки с описанием тарифов
@@ -69,13 +70,12 @@ export async function handleBuySubscription(ctx: Context, dataSource: DataSource
     return;
   }
 
-  // Стоимость подписки: 1 месяц = 1000 звёзд
-  const subscriptionPriceStars = 1000;
+  const subscriptionPriceStars = SUBSCRIPTION_PRICE_STARS;
 
   try {
     await ctx.replyWithInvoice({
       title: 'Подписка PRO на 1 месяц',
-      description: `Подписка на сервис Post Stock Pro (${subscriptionPriceStars} ⭐ ≈ $10 USD). После покупки ваш пригласивший (если есть) получит бесплатный месяц!`,
+      description: `Подписка на сервис Post Stock Pro (${subscriptionPriceStars} ⭐). После покупки ваш пригласивший (если есть) получит бонус!`,
       payload: `subscription_${user.id}_${Date.now()}`,
       provider_data: JSON.stringify({ userId: user.id }),
       currency: 'XTR', // Telegram Stars

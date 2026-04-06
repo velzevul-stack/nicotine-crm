@@ -109,4 +109,5 @@ export async function getPaymentStatus(paymentId: string | number): Promise<any>
   return response.json();
 }
 
-export const SUBSCRIPTION_PRICE_USD = 10;
+export const SUBSCRIPTION_PRICE_USD = 8;
+export const SUBSCRIPTION_PRICE_STARS = 1040;

@@ -159,7 +159,7 @@ export function SubscriptionTab() {
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 rounded-[12px] bg-[#151922] border border-white/10">
               <span className="text-sm text-[#9CA3AF]">PRO — 1 месяц</span>
-              <span className="text-lg font-bold text-[#F5F5F7]">$10</span>
+              <span className="text-lg font-bold text-[#F5F5F7]">$8</span>
             </div>
 
             <button

@@ -48,7 +48,7 @@ export function LoginForm() {
     }
   }, [router]);
 
-  const performLogin = useCallback(async (key: string, isTgApp: boolean) => {
+  const performLogin = useCallback(async (key: string) => {
     const res = await fetch('/api/auth/key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -59,9 +59,11 @@ export function LoginForm() {
       const data = await res.json();
       clearAccessKeyFromUrlSession();
       resetNavKeyAutoLoginAttempt();
-      // Сохраняем ключ в localStorage для Telegram mini-app
-      if (isTgApp) {
+      // Всегда сохраняем ключ — иначе после перезапуска Mini App / браузера нет автологина
+      try {
         localStorage.setItem(STORAGE_KEY, key);
+      } catch {
+        /* private mode / quota */
       }
       handleLoginSuccess(data.subscriptionStatus);
     } else {
@@ -82,7 +84,10 @@ export function LoginForm() {
         setLoading(true);
       }
 
-      const initData = await waitForTelegramInitData();
+      const initData = await waitForTelegramInitData({
+        webAppWaitMs: 15_000,
+        initDataWaitMs: 15_000,
+      });
 
       if (cancelled) return;
 
@@ -90,9 +95,21 @@ export function LoginForm() {
       if (tg) setIsTelegramApp(true);
 
       if (!tg) {
-        setLoading(false);
-        const savedKey = localStorage.getItem(STORAGE_KEY);
-        if (savedKey) setAccessKey(savedKey);
+        const savedKey = localStorage.getItem(STORAGE_KEY)?.trim();
+        if (savedKey) {
+          setLoading(true);
+          try {
+            await performLogin(savedKey);
+            return;
+          } catch (e) {
+            console.error(e);
+            setAccessKey(savedKey);
+          } finally {
+            if (!cancelled) setLoading(false);
+          }
+        } else {
+          setLoading(false);
+        }
         return;
       }
 
@@ -100,7 +117,7 @@ export function LoginForm() {
       if (navKey?.trim() && tryMarkNavKeyAutoLoginAttempt(navKey.trim())) {
         setLoading(true);
         try {
-          await performLogin(navKey.trim(), true);
+          await performLogin(navKey.trim());
           return;
         } catch (e) {
           console.error(e);
@@ -121,7 +138,7 @@ export function LoginForm() {
           const savedKey = localStorage.getItem(STORAGE_KEY);
 
           if (savedKey) {
-            await performLogin(savedKey, true);
+            await performLogin(savedKey);
             return;
           }
 
@@ -166,7 +183,7 @@ export function LoginForm() {
       if (savedKey) {
         setLoading(true);
         try {
-          await performLogin(savedKey, true);
+          await performLogin(savedKey);
         } catch (e) {
           console.error(e);
           setAccessKey(savedKey);
@@ -198,11 +215,12 @@ export function LoginForm() {
       if (res.ok) {
         const data = await res.json();
         clearAccessKeyFromUrlSession();
-        // Сохраняем ключ в localStorage для Telegram mini-app
-        if (isTelegramApp) {
-          localStorage.setItem(STORAGE_KEY, accessKey);
+        resetNavKeyAutoLoginAttempt();
+        try {
+          localStorage.setItem(STORAGE_KEY, accessKey.trim());
+        } catch {
+          /* ignore */
         }
-        // Проверяем подписку и редиректим соответственно
         handleLoginSuccess(data.subscriptionStatus);
       } else {
         const data = await res.json();

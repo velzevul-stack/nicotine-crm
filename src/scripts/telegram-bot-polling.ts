@@ -27,7 +27,7 @@ import {
   DebtOperationEntity,
   PostFormatSuggestionEntity,
 } from '@/lib/db/entities';
-import { createInvoice, SUBSCRIPTION_PRICE_USD } from '@/lib/nowpayments';
+import { createInvoice, SUBSCRIPTION_PRICE_USD, SUBSCRIPTION_PRICE_STARS } from '@/lib/nowpayments';
 import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
 import {
   applyWendigoSuperadminToUser,
@@ -246,7 +246,7 @@ async function checkAndSendTrialEndNotification(telegramId: string, userId: numb
         `• 📊 Управлению остатками\n` +
         `• 💰 Отслеживанию продаж и долгов\n` +
         `• 📈 Детальной аналитике\n\n` +
-        `💳 Продолжите пользоваться всеми возможностями всего за 1000 ⭐ (≈ $10) в месяц!\n\n` +
+        `💳 Продолжите пользоваться всеми возможностями всего за ${SUBSCRIPTION_PRICE_STARS} ⭐ в месяц!\n\n` +
         `Используйте команду /subscribe для покупки подписки.`;
 
       await bot.telegram.sendMessage(userId, message, {

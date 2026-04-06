@@ -4,7 +4,7 @@ import type { Context } from 'telegraf';
 import type { DataSource } from 'typeorm';
 import { getDataSource } from '@/lib/db/data-source';
 import { UserEntity, PostFormatEntity, UserShopEntity, CategoryEntity, BrandEntity, ProductFormatEntity, FlavorEntity, StockItemEntity, ShopEntity, SaleEntity, SaleItemEntity, CryptoPaymentEntity, ReferralEarningEntity } from '@/lib/db/entities';
-import { createInvoice, SUBSCRIPTION_PRICE_USD } from '@/lib/nowpayments';
+import { createInvoice, SUBSCRIPTION_PRICE_USD, SUBSCRIPTION_PRICE_STARS } from '@/lib/nowpayments';
 import {
   getSupportTelegramUsernameForUser,
   supportUsernameToTelegramUrl,
@@ -804,8 +804,8 @@ bot.command('subscribe', async (ctx) => {
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '⭐ Купить PRO — 1 месяц (1000 ⭐️)', callback_data: 'subscription_buy_stars' }],
-          [{ text: '₿ Оплатить криптой — $10', callback_data: 'subscription_buy_crypto' }],
+          [{ text: `⭐ Купить PRO — 1 месяц (${SUBSCRIPTION_PRICE_STARS} ⭐️)`, callback_data: 'subscription_buy_stars' }],
+          [{ text: `₿ Оплатить криптой — $${SUBSCRIPTION_PRICE_USD}`, callback_data: 'subscription_buy_crypto' }],
           [{ text: '🔙 Назад', callback_data: 'profile_back' }],
         ],
       },
@@ -832,12 +832,12 @@ bot.action(['subscription_buy_stars', 'subscription_buy_pro'], async (ctx) => {
     return;
   }
 
-  const subscriptionPriceStars = 1000;
+  const subscriptionPriceStars = SUBSCRIPTION_PRICE_STARS;
 
   try {
     await ctx.replyWithInvoice({
       title: 'Подписка PRO на 1 месяц',
-      description: `Подписка на сервис Post Stock Pro (${subscriptionPriceStars} ⭐ ≈ $10 USD). После покупки ваш пригласивший (если есть) получит бонус!`,
+      description: `Подписка на сервис Post Stock Pro (${subscriptionPriceStars} ⭐). После покупки ваш пригласивший (если есть) получит бонус!`,
       payload: `subscription_${user.id}_${Date.now()}`,
       provider_data: JSON.stringify({ userId: user.id }),
       currency: 'XTR',
@@ -1926,8 +1926,8 @@ bot.on('text', async (ctx) => {
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: '⭐ Купить PRO — 1 месяц (1000 ⭐️)', callback_data: 'subscription_buy_stars' }],
-            [{ text: '₿ Оплатить криптой — $10', callback_data: 'subscription_buy_crypto' }],
+            [{ text: `⭐ Купить PRO — 1 месяц (${SUBSCRIPTION_PRICE_STARS} ⭐️)`, callback_data: 'subscription_buy_stars' }],
+            [{ text: `₿ Оплатить криптой — $${SUBSCRIPTION_PRICE_USD}`, callback_data: 'subscription_buy_crypto' }],
             [{ text: '🔙 Назад', callback_data: 'profile_back' }],
           ],
         },
