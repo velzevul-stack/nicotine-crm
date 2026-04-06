@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Crown, Clock, X } from 'lucide-react';
-import { getTelegramBotUsernamePublic } from '@/lib/telegram/bot-username';
 
 interface TrialBannerProps {
   subscriptionStatus: string;
@@ -21,7 +21,6 @@ export function TrialBanner({
 
   if (isAdmin || dismissed) return null;
 
-  const subscribeBotUrl = `https://t.me/${getTelegramBotUsernamePublic()}?start=subscribe`;
   const now = new Date();
 
   if (subscriptionStatus === 'trial' && trialEndsAt) {
@@ -35,14 +34,12 @@ export function TrialBanner({
           <p className="text-sm text-red-300 flex-1">
             Пробный период закончился. Оформите подписку для продолжения работы.
           </p>
-          <a
-            href={subscribeBotUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/profile?section=subscription"
             className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
           >
             Оформить подписку
-          </a>
+          </Link>
           <button
             onClick={() => setDismissed(true)}
             className="shrink-0 p-1 rounded-md hover:bg-red-500/20 text-red-400 transition-colors"
@@ -59,14 +56,12 @@ export function TrialBanner({
         <p className="text-sm text-amber-200 flex-1">
           Пробный период: <strong>{daysLeft}</strong> {daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'} осталось. Оформите подписку!
         </p>
-        <a
-          href={subscribeBotUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href="/profile?section=subscription"
           className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors"
         >
           Оформить подписку
-        </a>
+        </Link>
         <button
           onClick={() => setDismissed(true)}
           className="shrink-0 p-1 rounded-md hover:bg-amber-500/20 text-amber-400 transition-colors"
@@ -84,14 +79,12 @@ export function TrialBanner({
         <p className="text-sm text-red-300 flex-1">
           Пробный период закончился. Оформите подписку для продолжения работы.
         </p>
-        <a
-          href={subscribeBotUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href="/profile?section=subscription"
           className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors"
         >
           Оформить подписку
-        </a>
+        </Link>
         <button
           onClick={() => setDismissed(true)}
           className="shrink-0 p-1 rounded-md hover:bg-red-500/20 text-red-400 transition-colors"

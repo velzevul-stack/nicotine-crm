@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Store, CreditCard, Package, Crown, Users, ChevronRight, ArrowLeft, Wallet, BarChart3, Truck } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -17,7 +18,23 @@ import { DeliveryTab } from './profile/DeliveryTab';
 
 type Section = 'settings' | 'debts' | 'reserves' | 'cards' | 'reports' | 'delivery' | 'subscription' | 'referrals';
 
+const SECTION_IDS: Section[] = [
+  'settings',
+  'debts',
+  'reserves',
+  'cards',
+  'reports',
+  'delivery',
+  'subscription',
+  'referrals',
+];
+
+function isSection(v: string | null): v is Section {
+  return v !== null && SECTION_IDS.includes(v as Section);
+}
+
 export function Profile() {
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [activeSection, setActiveSection] = useState<Section | null>(null);
   const reduceMotion = useReducedMotion();
@@ -42,6 +59,13 @@ export function Profile() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    const raw = searchParams.get('section');
+    if (isSection(raw)) {
+      setActiveSection(raw);
+    }
+  }, [searchParams]);
 
   const sections = [
     { id: 'settings' as Section, label: 'Настройки магазина', icon: Store, badge: undefined, color: '#BFE7E5' },
