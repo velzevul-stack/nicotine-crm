@@ -9,7 +9,7 @@
  * РЕФАКТОРИНГ: Код разделен на модули для улучшения читаемости и поддержки
  */
 
-import dotenv from 'dotenv';
+import './load-dotenv-first';
 import { Telegraf, Context } from 'telegraf';
 import { Client } from 'pg';
 import { DataSource, IsNull } from 'typeorm';
@@ -57,9 +57,6 @@ import { getSubscriptionKeyboard } from './bot/keyboards/subscription';
 import { setupErrorHandler } from './bot/utils/error-handler';
 import { parseRequiredDbPassword } from '@/lib/env/db-password';
 import { resolveDbHost } from '@/lib/env/db-host';
-
-// Загружаем переменные окружения из .env файла (с перезаписью существующих)
-dotenv.config({ override: true });
 
 // Проверяем необходимые переменные окружения
 const botToken = process.env.TELEGRAM_BOT_TOKEN;

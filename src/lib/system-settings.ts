@@ -1,3 +1,4 @@
+// Скрипты (polling): dotenv должен загрузиться до первого import этого файла — см. src/scripts/load-dotenv-first.ts
 import { getDataSource } from '@/lib/db/data-source';
 import { SystemSettingsEntity } from '@/lib/db/entities';
 
