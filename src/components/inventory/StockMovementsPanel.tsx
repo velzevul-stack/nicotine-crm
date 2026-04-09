@@ -43,21 +43,30 @@ type MovementsResponse = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  receipt_to_post: 'Приемка в пост',
-  receipt_to_warehouse: 'Приемка на склад',
+  receipt_to_post: 'Приемка товара',
+  receipt_to_warehouse: 'Приемка товара',
   sale: 'Продажа',
   reservation_sale: 'Продажа резерва',
   debt_sale: 'Продажа в долг',
   cancel_sale: 'Отмена продажи',
-  manual_transfer: 'Ручной перенос',
+  manual_transfer: 'Корректировка остатков',
   manual_decrease: 'Ручное списание',
   clear_stock: 'Очистка остатков',
 };
 
 function zoneLabel(zone: 'post' | 'warehouse' | null): string {
-  if (zone === 'post') return 'post';
-  if (zone === 'warehouse') return 'warehouse';
-  return '-';
+  if (zone === 'post') return 'Витрина';
+  if (zone === 'warehouse') return 'Склад';
+  return 'Без зоны';
+}
+
+function zoneFlowLabel(fromZone: Movement['fromZone'], toZone: Movement['toZone']): string {
+  if (fromZone === 'warehouse' && toZone === 'post') return 'Витрина отражает склад';
+  if (fromZone === 'post' && toZone === 'warehouse') return 'Витрина отражает склад';
+  if (!fromZone && !toZone) return 'Изменение остатков';
+  if (!fromZone && toZone) return 'Изменение остатков';
+  if (fromZone && !toZone) return 'Изменение остатков';
+  return `${zoneLabel(fromZone)} -> ${zoneLabel(toZone)}`;
 }
 
 function contextLabel(type: Movement['contextType'], id: string | null): string {
@@ -176,9 +185,9 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
                 <div className="text-xs text-muted-foreground">{new Date(m.createdAt).toLocaleString()}</div>
                 <div className="text-sm font-medium break-words">{m.productName}</div>
                 <div className="text-xs break-words">{ACTION_LABELS[m.actionType] || m.actionType}</div>
-                <div className="text-xs break-words">Зоны: {zoneLabel(m.fromZone)} {'->'} {zoneLabel(m.toZone)}</div>
+                <div className="text-xs break-words">Перемещение: {zoneFlowLabel(m.fromZone, m.toZone)}</div>
                 <div className="text-xs break-words">Кол-во: {m.quantity}</div>
-                <div className="text-xs break-words">Post: {m.postStockBefore} {'->'} {m.postStockAfter}</div>
+                <div className="text-xs break-words">Витрина: {m.postStockBefore} {'->'} {m.postStockAfter}</div>
                 <div className="text-xs break-words">Склад: {m.warehouseBefore} {'->'} {m.warehouseAfter}</div>
                 <div className="text-xs break-words">Контекст: {contextLabel(m.contextType, m.contextId)}</div>
                 <div className="text-xs break-words text-muted-foreground">{m.comment || '-'}</div>
@@ -193,9 +202,9 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
                   <TableHead className="w-[170px]">Когда</TableHead>
                   <TableHead className="w-[250px]">Товар</TableHead>
                   <TableHead className="w-[160px]">Операция</TableHead>
-                  <TableHead className="w-[130px]">Зоны</TableHead>
+                  <TableHead className="w-[180px]">Перемещение</TableHead>
                   <TableHead className="w-[80px]">Кол-во</TableHead>
-                  <TableHead className="w-[120px]">Post до/после</TableHead>
+                  <TableHead className="w-[120px]">Витрина до/после</TableHead>
                   <TableHead className="w-[130px]">Склад до/после</TableHead>
                   <TableHead className="w-[150px]">Контекст</TableHead>
                   <TableHead className="w-[260px]">Комментарий</TableHead>
@@ -207,7 +216,7 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
                     <TableCell className="whitespace-normal break-all align-top">{new Date(m.createdAt).toLocaleString()}</TableCell>
                     <TableCell className="whitespace-normal break-all align-top">{m.productName}</TableCell>
                     <TableCell className="whitespace-normal break-all align-top">{ACTION_LABELS[m.actionType] || m.actionType}</TableCell>
-                    <TableCell className="whitespace-normal break-all align-top">{zoneLabel(m.fromZone)} {'->'} {zoneLabel(m.toZone)}</TableCell>
+                    <TableCell className="whitespace-normal break-all align-top">{zoneFlowLabel(m.fromZone, m.toZone)}</TableCell>
                     <TableCell className="whitespace-normal break-all align-top">{m.quantity}</TableCell>
                     <TableCell className="whitespace-normal break-all align-top">{m.postStockBefore} {'->'} {m.postStockAfter}</TableCell>
                     <TableCell className="whitespace-normal break-all align-top">{m.warehouseBefore} {'->'} {m.warehouseAfter}</TableCell>
