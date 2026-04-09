@@ -39,6 +39,7 @@ export function Inventory() {
   const [expandedFormats, setExpandedFormats] = useState<Set<string>>(new Set());
   
   const [showReceive, setShowReceive] = useState(false);
+  const [receiveInitialBarcode, setReceiveInitialBarcode] = useState<string | null>(null);
   
   const [showScan, setShowScan] = useState(false);
   const [scanMode, setScanMode] = useState<'receive' | 'search'>('search');
@@ -184,9 +185,8 @@ export function Inventory() {
 
   const handleScan = (code: string) => {
     if (scanMode === 'receive') {
-      // This mode is now handled inside ReceiveModal, but if triggered from main screen:
+      setReceiveInitialBarcode(code);
       setShowReceive(true);
-      // Ideally we pass the code to ReceiveModal, but for now just open it
     } else {
       setSearch(code);
       toast({ title: "Поиск по штрихкоду", description: code });
@@ -509,7 +509,11 @@ export function Inventory() {
 
       <ReceiveModal 
         open={showReceive} 
-        onOpenChange={setShowReceive}
+        onOpenChange={(nextOpen) => {
+          setShowReceive(nextOpen);
+          if (!nextOpen) setReceiveInitialBarcode(null);
+        }}
+        initialBarcode={receiveInitialBarcode}
         onOpenCategoryManager={() => {
           setShowReceive(false);
           setAutoOpenCategoryCreate(true);

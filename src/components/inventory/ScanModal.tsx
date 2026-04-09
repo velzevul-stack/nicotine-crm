@@ -62,8 +62,9 @@ const BARCODE_FORMATS: Html5QrcodeSupportedFormats[] = [
   Html5QrcodeSupportedFormats.UPC_EAN_EXTENSION,
 ];
 
-const MIN_GAP_MS = 500;
-const SAME_CODE_COOLDOWN_MS = 1500;
+const MIN_GAP_MS = 450;
+const SAME_CODE_COOLDOWN_MS = 1800;
+const NOISE_CODE_WINDOW_MS = 900;
 
 /** Ждём появления узла в DOM (портал диалога) без долгой задержки — на Android длинный setTimeout ломает связь с user gesture и камеру снова «спрашивают». */
 function waitForElementById(elementId: string, isCancelled: () => boolean, maxFrames = 90): Promise<boolean> {
@@ -105,6 +106,7 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
 
   const lastScanAtRef = useRef(0);
   const lastCodeRef = useRef('');
+  const lastAcceptedRef = useRef<{ code: string; at: number } | null>(null);
 
   const readerId = `qr-reader-${scanAttempt}`;
 
@@ -134,6 +136,7 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
 
     lastScanAtRef.current = 0;
     lastCodeRef.current = '';
+    lastAcceptedRef.current = null;
     setError(null);
     let cancelled = false;
 
@@ -179,9 +182,16 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
           const now = Date.now();
           if (now - lastScanAtRef.current < MIN_GAP_MS) return;
           if (text === lastCodeRef.current && now - lastScanAtRef.current < SAME_CODE_COOLDOWN_MS) return;
+          const lastAccepted = lastAcceptedRef.current;
+          if (lastAccepted && text !== lastAccepted.code && now - lastAccepted.at < NOISE_CODE_WINDOW_MS) {
+            // Many handheld scanners/cameras emit a second random decode shortly after a valid one.
+            // Keep the first code and drop noisy immediate alternatives.
+            return;
+          }
 
           lastScanAtRef.current = now;
           lastCodeRef.current = text;
+          lastAcceptedRef.current = { code: text, at: now };
 
           playScanBeep();
           onScanRef.current(text);

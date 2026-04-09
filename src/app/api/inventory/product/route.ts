@@ -13,6 +13,13 @@ import { z } from 'zod';
 const emptyToUndefined = (v: unknown) =>
   v === '' || v === null || v === undefined ? undefined : v;
 
+const PRICE_EPS = 0.005;
+
+const normalizeName = (v: string) => v.normalize('NFKC').replace(/\s+/g, ' ').trim();
+const normalizeNameKey = (v: string) => normalizeName(v).toLowerCase();
+const normalizeBarcode = (v: string) =>
+  v.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, '').trim();
+
 const createSchema = z.object({
   barcode: z.string().optional().nullable(),
   categoryId: z.string().uuid().optional(),
@@ -30,6 +37,9 @@ const createSchema = z.object({
   costPrice: z.number().finite().min(0, { message: 'Себестоимость не может быть отрицательной' }),
   unitPrice: z.number().min(0),
   quantity: z.number().int().min(0).default(0),
+  piecesPerPack: z.number().int().positive().optional(),
+  packCost: z.number().finite().min(0).optional(),
+  costPerPiece: z.number().finite().min(0).optional(),
   customValues: z.record(z.any()).optional(),
 });
 
@@ -47,7 +57,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const PRICE_EPS = 0.005;
   if (parsed.data.costPrice > parsed.data.unitPrice + PRICE_EPS) {
     return NextResponse.json(
       { message: 'Себестоимость не может быть больше розничной цены' },
@@ -71,6 +80,9 @@ export async function POST(request: NextRequest) {
     costPrice,
     unitPrice,
     quantity,
+    piecesPerPack,
+    packCost,
+    costPerPiece,
     customValues,
   } = parsed.data;
 
@@ -82,17 +94,17 @@ export async function POST(request: NextRequest) {
 
     // 1. Resolve Category
     let catId = categoryId;
-    if (!catId && categoryName) {
+    const normalizedCategoryName = categoryName ? normalizeName(categoryName) : undefined;
+    if (!catId && normalizedCategoryName) {
       // Try to find by name first
-      let cat = await em.getRepository(CategoryEntity).findOne({
-        where: { shopId, name: categoryName },
-      });
+      const allCategories = await em.getRepository(CategoryEntity).find({ where: { shopId } });
+      let cat = allCategories.find((c) => normalizeNameKey(c.name) === normalizeNameKey(normalizedCategoryName));
       if (!cat) {
         // Create new
         const maxOrder = await em.getRepository(CategoryEntity).count({ where: { shopId } });
         cat = em.getRepository(CategoryEntity).create({
           shopId,
-          name: categoryName,
+          name: normalizedCategoryName,
           sortOrder: maxOrder + 1,
           emoji: '📦', // Default emoji
         });
@@ -107,10 +119,12 @@ export async function POST(request: NextRequest) {
 
     // 2. Resolve Brand
     let brId = brandId;
-    if (!brId && brandName) {
-      let brand = await em.getRepository(BrandEntity).findOne({
-        where: { shopId, name: brandName, categoryId: catId },
+    const normalizedBrandName = brandName ? normalizeName(brandName) : undefined;
+    if (!brId && normalizedBrandName) {
+      const existingBrands = await em.getRepository(BrandEntity).find({
+        where: { shopId, categoryId: catId },
       });
+      let brand = existingBrands.find((b) => normalizeNameKey(b.name) === normalizeNameKey(normalizedBrandName));
       if (!brand) {
         // Определяем sortOrder для нового бренда
         const maxOrder = await em
@@ -124,7 +138,7 @@ export async function POST(request: NextRequest) {
         brand = em.getRepository(BrandEntity).create({
           shopId,
           categoryId: catId,
-          name: brandName,
+          name: normalizedBrandName,
           emojiPrefix: brandEmoji || '',
           sortOrder,
         });
@@ -164,10 +178,12 @@ export async function POST(request: NextRequest) {
 
     // 3. Resolve Format
     let fmtId = formatId;
-    if (!fmtId && formatName) {
-      let format = await em.getRepository(ProductFormatEntity).findOne({
-        where: { shopId, brandId: brId, name: formatName },
+    const normalizedFormatName = formatName ? normalizeName(formatName) : undefined;
+    if (!fmtId && normalizedFormatName) {
+      const existingFormats = await em.getRepository(ProductFormatEntity).find({
+        where: { shopId, brandId: brId },
       });
+      let format = existingFormats.find((f) => normalizeNameKey(f.name) === normalizeNameKey(normalizedFormatName));
       if (!format) {
         // Нормализуем крепость для жидкостей и снюса
         let normalizedStrength = '';
@@ -232,7 +248,7 @@ export async function POST(request: NextRequest) {
         format = em.getRepository(ProductFormatEntity).create({
           shopId,
           brandId: brId,
-          name: formatName,
+          name: normalizedFormatName,
           unitPrice,
           isLiquid,
           strengthLabel: normalizedStrength,
@@ -320,32 +336,43 @@ export async function POST(request: NextRequest) {
     }
     
     // Для расходников может быть пустое имя вкуса, используем уникальный ключ
+    finalFlavorName = normalizeName(finalFlavorName);
     const flavorSearchName = isConsumable && !finalFlavorName 
       ? `__consumable_${fmtId}` // Уникальное имя для расходников без сопротивления
       : finalFlavorName;
+    const normalizedFlavorName = normalizeNameKey(flavorSearchName);
     
     let flavor = await em.getRepository(FlavorEntity).findOne({
-      where: { shopId, productFormatId: fmtId, name: flavorSearchName },
+      where: { shopId, productFormatId: fmtId, normalizedName: normalizedFlavorName },
     });
+    if (!flavor) {
+      const existingFlavors = await em.getRepository(FlavorEntity).find({
+        where: { shopId, productFormatId: fmtId },
+      });
+      flavor = existingFlavors.find((f) => normalizeNameKey(f.name) === normalizedFlavorName) ?? null;
+    }
 
     if (!flavor) {
         flavor = em.getRepository(FlavorEntity).create({
         shopId,
         productFormatId: fmtId,
         name: finalFlavorName || flavorSearchName,
-        barcode: barcode || null,
+        barcode: barcode ? normalizeBarcode(barcode) : null,
+        normalizedName: normalizedFlavorName,
         customValues: flavorCustomValues ?? undefined,
       });
       await em.getRepository(FlavorEntity).save(flavor);
     } else {
         // Update barcode if provided and empty
         if (barcode && !flavor.barcode) {
-            flavor.barcode = barcode;
+            flavor.barcode = normalizeBarcode(barcode);
+            flavor.normalizedName = flavor.normalizedName || normalizeNameKey(flavor.name || flavorSearchName);
             await em.getRepository(FlavorEntity).save(flavor);
         }
         // Update customValues if provided
         if (flavorCustomValues !== null) {
           flavor.customValues = flavorCustomValues;
+          flavor.normalizedName = flavor.normalizedName || normalizeNameKey(flavor.name || flavorSearchName);
           await em.getRepository(FlavorEntity).save(flavor);
         }
     }
@@ -361,10 +388,16 @@ export async function POST(request: NextRequest) {
         flavorId: flavor.id,
         quantity: quantity,
         costPrice,
+        packCost: packCost ?? null,
+        piecesPerPack: piecesPerPack ?? null,
+        costPerPiece: costPerPiece ?? null,
       });
     } else {
       stock.quantity += quantity;
       stock.costPrice = costPrice; // Update cost price to latest
+      if (typeof packCost === 'number') stock.packCost = packCost;
+      if (typeof piecesPerPack === 'number') stock.piecesPerPack = piecesPerPack;
+      if (typeof costPerPiece === 'number') stock.costPerPiece = costPerPiece;
     }
     await em.getRepository(StockItemEntity).save(stock);
 

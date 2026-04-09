@@ -4,6 +4,12 @@ import { getSession } from '@/lib/auth';
 import { FlavorEntity, StockItemEntity, ProductFormatEntity, SaleItemEntity } from '@/lib/db/entities';
 import { z } from 'zod';
 
+const PRICE_EPS = 0.005;
+const normalizeName = (v: string) => v.normalize('NFKC').replace(/\s+/g, ' ').trim();
+const normalizeNameKey = (v: string) => normalizeName(v).toLowerCase();
+const normalizeBarcode = (v: string) =>
+  v.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, '').trim();
+
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   barcode: z.string().optional().nullable(),
@@ -42,10 +48,34 @@ export async function PATCH(
       return NextResponse.json({ message: 'Flavor not found' }, { status: 404 });
     }
 
-    if (parsed.data.name !== undefined) flavor.name = parsed.data.name;
-    if (parsed.data.barcode !== undefined) flavor.barcode = parsed.data.barcode;
+    if (parsed.data.name !== undefined) {
+      flavor.name = normalizeName(parsed.data.name);
+      flavor.normalizedName = normalizeNameKey(parsed.data.name);
+    }
+    if (parsed.data.barcode !== undefined) {
+      flavor.barcode = parsed.data.barcode ? normalizeBarcode(parsed.data.barcode) : parsed.data.barcode;
+    }
     if (parsed.data.isActive !== undefined) flavor.isActive = parsed.data.isActive;
-    
+
+    const nextCostPrice = parsed.data.costPrice;
+    const nextUnitPrice = parsed.data.unitPrice;
+    if (nextCostPrice !== undefined || nextUnitPrice !== undefined) {
+      const stockRepo = em.getRepository(StockItemEntity);
+      const formatRepo = em.getRepository(ProductFormatEntity);
+      const [stock, format] = await Promise.all([
+        stockRepo.findOne({ where: { flavorId: flavorId, shopId: session.shopId } }),
+        formatRepo.findOne({ where: { id: flavor.productFormatId, shopId: session.shopId } }),
+      ]);
+      const effectiveCost = nextCostPrice ?? (stock?.costPrice ?? 0);
+      const effectiveUnit = nextUnitPrice ?? (format?.unitPrice ?? 0);
+      if (effectiveCost > effectiveUnit + PRICE_EPS) {
+        return NextResponse.json(
+          { message: 'Себестоимость не может быть больше розничной цены' },
+          { status: 400 }
+        );
+      }
+    }
+
     await flavorRepo.save(flavor);
 
     // 2. Update StockItem (costPrice)

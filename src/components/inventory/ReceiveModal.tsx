@@ -19,6 +19,7 @@ interface ReceiveModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenCategoryManager?: () => void;
+  initialBarcode?: string | null;
 }
 
 interface ReceiveItem {
@@ -65,6 +66,18 @@ function areSimilar(str1: string, str2: string): boolean {
 
 type DecimalParseOpts = { min?: number; max?: number };
 
+function normalizeBarcode(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function normalizeEntityName(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 /** Омы и доп. поля: скобки, запятая, «.8», Ω, пробелы, странные символы с клавиатур — нормализуем. */
 function normalizeDecimalNumericInput(
   raw: string,
@@ -105,7 +118,7 @@ function normalizeDecimalNumericInput(
   return { ok: true, normalized: token };
 }
 
-export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: ReceiveModalProps) {
+export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initialBarcode }: ReceiveModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('scan');
@@ -120,6 +133,7 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
 
   const inputRef = useRef<HTMLInputElement>(null);
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingBarcodeRef = useRef<string | null>(null);
 
   const { data: inventory } = useQuery({
     queryKey: ['inventory'],
@@ -155,6 +169,12 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
     }
   }, [open, activeTab]);
 
+  useEffect(() => {
+    if (!open || !initialBarcode) return;
+    setActiveTab('scan');
+    processBarcode(initialBarcode);
+  }, [open, initialBarcode]);
+
   // Auto-process barcode when input changes (for scanner input)
   useEffect(() => {
     if (!scanInput || !open || activeTab !== 'scan') return;
@@ -187,17 +207,23 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
   };
 
   const processBarcode = (code: string) => {
-    if (!code.trim()) return;
-    
-    const trimmedCode = code.trim();
-    
+    const normalizedCode = normalizeBarcode(code);
+    if (!normalizedCode) return;
+
     const flavors = Array.isArray(inventory?.flavors) ? inventory.flavors : [];
-    const foundByBarcode = flavors.find((f: any) => f.barcode === trimmedCode);
+    if (!flavors.length) {
+      pendingBarcodeRef.current = normalizedCode;
+      setScanInput('');
+      return;
+    }
+
+    const foundByBarcode = flavors.find((f: any) => normalizeBarcode(String(f.barcode || '')) === normalizedCode);
     
     if (foundByBarcode) {
       addItemToReceive(foundByBarcode.id);
       setScanInput('');
       setNotFoundBarcode(null);
+      pendingBarcodeRef.current = null;
       toast({ 
         title: "Товар принят", 
         description: `${foundByBarcode.name} (+1)`,
@@ -207,11 +233,11 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
       return;
     }
 
-    setNotFoundBarcode(trimmedCode);
+    setNotFoundBarcode(normalizedCode);
     setScanInput('');
     toast({ 
       title: "Товар не найден", 
-      description: `Штрихкод: ${trimmedCode}`,
+      description: `Штрихкод: ${normalizedCode}`,
       variant: "destructive",
       duration: 3000
     });
@@ -246,6 +272,18 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager }: Rece
       }];
     });
   };
+
+  useEffect(() => {
+    if (!open) {
+      pendingBarcodeRef.current = null;
+      return;
+    }
+    const pendingBarcode = pendingBarcodeRef.current;
+    const flavors = Array.isArray(inventory?.flavors) ? inventory.flavors : [];
+    if (!pendingBarcode || !flavors.length) return;
+    pendingBarcodeRef.current = null;
+    processBarcode(pendingBarcode);
+  }, [open, inventory?.flavors]);
 
   const confirmReceive = async () => {
     try {
@@ -660,8 +698,10 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     strengthLabel: '', // Жидкости/снюс: мг; кастомные поля strength_label
     ohmValue: '', // Расходники: номинал Ом
     consumablePackQty: '', // Расходники: опционально — доп. текст к позиции (вкус/подпись)
+    piecesPerPack: 1,
     flavorName: '',
-    costPrice: 0,
+    costPrice: 0, // Для расходников сюда пишем цену за штуку (рассчитываем из стоимости упаковки)
+    packCost: 0,
     unitPrice: 0,
     quantity: 1,
     customValues: {} as Record<string, any>
@@ -679,7 +719,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     
     return brands.filter((b: any) => {
       if (b.categoryId !== formData.categoryId) return false;
-      return areSimilar(b.name, formData.brandName);
+      return areSimilar(normalizeEntityName(b.name), normalizeEntityName(formData.brandName));
     });
   }, [formData.brandName, formData.categoryId, brands]);
 
@@ -728,14 +768,14 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             computedFormatName = `${selectedBrand?.name || ''} ${formData.strengthLabel}`.trim();
           }
           const selectedFormat = productFormats.find((f: any) => 
-            f.brandId === formData.brandId && f.name === computedFormatName
+            f.brandId === formData.brandId && normalizeEntityName(f.name) === normalizeEntityName(computedFormatName)
           );
           formatName = selectedFormat?.name || computedFormatName;
         } else {
           if (isConsumableCategory && formData.ohmValue) {
             const computedFormatName = `${selectedBrand?.name || ''} ${formData.ohmValue}`;
             const selectedFormat = productFormats.find((f: any) => 
-              f.brandId === formData.brandId && f.name === computedFormatName
+              f.brandId === formData.brandId && normalizeEntityName(f.name) === normalizeEntityName(computedFormatName)
             );
             formatName = selectedFormat?.name || computedFormatName;
           } else {
@@ -805,6 +845,22 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
           ? 0
           : parseFloat(formData.costPrice) || 0
         : formData.costPrice;
+    const packCostValue =
+      typeof formData.packCost === 'string'
+        ? formData.packCost === ''
+          ? 0
+          : parseFloat(formData.packCost) || 0
+        : formData.packCost;
+    const piecesPerPackValue =
+      typeof formData.piecesPerPack === 'string'
+        ? formData.piecesPerPack === ''
+          ? 0
+          : parseInt(formData.piecesPerPack, 10) || 0
+        : formData.piecesPerPack;
+    const effectiveCostPrice =
+      isConsumableCategory && packCostValue > 0 && piecesPerPackValue > 0
+        ? packCostValue / piecesPerPackValue
+        : costPriceValue;
     if (costPriceValue < 0) {
       toast({
         title: 'Ошибка',
@@ -814,10 +870,19 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       return;
     }
 
-    if (costPriceValue > unitPriceValue + 0.005) {
+    if (isConsumableCategory && packCostValue > 0 && piecesPerPackValue <= 0) {
       toast({
         title: 'Ошибка',
-        description: 'Себестоимость не может быть больше розничной цены',
+        description: 'Для расходников укажите количество штук в упаковке',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (effectiveCostPrice > unitPriceValue + 0.005) {
+      toast({
+        title: 'Ошибка',
+        description: 'Себестоимость за штуку не может быть больше розничной цены',
         variant: 'destructive',
       });
       return;
@@ -947,11 +1012,16 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     
     const payload: any = {
       barcode: formData.barcode.trim() || null,
-      costPrice: Math.max(0, costPriceValue),
+      costPrice: Math.max(0, effectiveCostPrice),
       unitPrice: unitPriceValue,
       quantity: formData.quantity,
       customValues: Object.keys(allCustomValues).length > 0 ? allCustomValues : undefined,
     };
+    if (isConsumableCategory) {
+      payload.piecesPerPack = piecesPerPackValue > 0 ? piecesPerPackValue : 1;
+      payload.packCost = Math.max(0, packCostValue);
+      payload.costPerPiece = Math.max(0, effectiveCostPrice);
+    }
 
     if (hasCategoryCustomFields) {
       payload.flavorName = formData.flavorName;
@@ -1028,7 +1098,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
           if (isConsumableCategory && payload.ohmValue) {
             const formatName = `${selectedBrand?.name || ''} ${payload.ohmValue}`;
             const selectedFormat = productFormats.find((f: any) => 
-              f.brandId === formData.brandId && f.name === formatName
+              f.brandId === formData.brandId && normalizeEntityName(f.name) === normalizeEntityName(formatName)
             );
             if (selectedFormat) {
               payload.formatId = selectedFormat.id;
@@ -1037,7 +1107,7 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             }
           } else if (selectedBrand) {
             const selectedFormat = productFormats.find((f: any) => 
-              f.brandId === formData.brandId && f.name === selectedBrand.name
+              f.brandId === formData.brandId && normalizeEntityName(f.name) === normalizeEntityName(selectedBrand.name)
             );
             if (selectedFormat) {
               payload.formatId = selectedFormat.id;
@@ -1491,6 +1561,46 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
               />
             </div>
           </div>
+
+          {isConsumableCategory && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Стоимость упаковки</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={formData.packCost || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, packCost: val === '' ? 0 : parseFloat(val) || 0 });
+                  }}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Штук в упаковке</Label>
+                <Input
+                  type="number"
+                  step="1"
+                  min={1}
+                  value={formData.piecesPerPack || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, piecesPerPack: val === '' ? 1 : Math.max(1, parseInt(val, 10) || 1) });
+                  }}
+                  placeholder="1"
+                />
+              </div>
+              <div className="col-span-2 text-xs text-muted-foreground">
+                Себестоимость за штуку: {
+                  (formData.packCost && formData.piecesPerPack)
+                    ? (Number(formData.packCost) / Number(formData.piecesPerPack)).toFixed(2)
+                    : Number(formData.costPrice || 0).toFixed(2)
+                } {getCurrencySymbol(shopData?.currency)}
+              </div>
+            </div>
+          )}
 
           {/* Preview */}
           {(() => {

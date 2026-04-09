@@ -115,6 +115,31 @@ function categoryType(catName: string): 'liquids' | 'snus' | 'devices' | 'consum
   return 'other';
 }
 
+function normalizeFlavorKey(name: string): string {
+  return name.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function dedupeFlavorsForFormat(
+  flavors: Array<{ id: string; productFormatId: string; name: string }>,
+  stockMap: Map<string, number>,
+): Array<{ id: string; productFormatId: string; name: string; quantity: number }> {
+  const byKey = new Map<string, { id: string; productFormatId: string; name: string; quantity: number }>();
+  for (const fl of flavors) {
+    const key = normalizeFlavorKey(fl.name || '');
+    const qty = stockMap.get(fl.id) ?? 0;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...fl, quantity: qty });
+      continue;
+    }
+    existing.quantity += qty;
+    if ((fl.name || '').length > (existing.name || '').length) {
+      existing.name = fl.name;
+    }
+  }
+  return Array.from(byKey.values());
+}
+
 export async function generateStockTable(
   input: ExcelGeneratorInput,
   outputPath: string
@@ -150,7 +175,10 @@ export async function generateStockTable(
         (f) => f.brandId === brand.id && f.isLiquid
       );
       for (const format of brandFormats) {
-        const formatFlavors = input.flavors.filter((fl) => fl.productFormatId === format.id);
+        const formatFlavors = dedupeFlavorsForFormat(
+          input.flavors.filter((fl) => fl.productFormatId === format.id),
+          stockMap
+        );
         if (formatFlavors.length === 0) continue;
 
         const formatLabel = [format.name, format.strengthLabel].filter(Boolean).join(' ');
@@ -166,7 +194,7 @@ export async function generateStockTable(
         for (const fl of formatFlavors) {
           const cell = ws.getRow(row).getCell(1);
           cell.value = fl.name;
-          const qty = stockMap.get(fl.id) ?? 0;
+          const qty = fl.quantity;
           if (qty === 0) applyOutOfStockStyle(cell);
           else applyTextStyle(cell);
           row++;
@@ -196,18 +224,21 @@ export async function generateStockTable(
         applyBrandStyle(cell);
       });
       let row = 2;
-      const byStrength = new Map<string, Array<{ brand: string; flavor: string; flavorId: string }>>();
+      const byStrength = new Map<string, Array<{ brand: string; flavor: string; quantity: number }>>();
       for (const format of input.formats.filter((f) => snusBrands.some((b) => b.id === f.brandId))) {
         const brand = input.brands.find((b) => b.id === format.brandId);
         if (!brand) continue;
         const str = (format.strengthLabel || '').replace(/мг/gi, 'mg').trim() || 'other';
         if (!byStrength.has(str)) byStrength.set(str, []);
         const priceStr = priceInline(format.unitPrice);
-        for (const fl of input.flavors.filter((f) => f.productFormatId === format.id)) {
+        for (const fl of dedupeFlavorsForFormat(
+          input.flavors.filter((f) => f.productFormatId === format.id),
+          stockMap
+        )) {
           byStrength.get(str)!.push({
             brand: brand.name,
             flavor: `${joinBrandName(brand.name, fl.name)}${priceStr}`,
-            flavorId: fl.id,
+            quantity: fl.quantity,
           });
         }
       }
@@ -219,7 +250,7 @@ export async function generateStockTable(
           if (item) {
             const cell = ws.getRow(row).getCell(col + 1);
             cell.value = item.flavor;
-            const qty = stockMap.get(item.flavorId) ?? 0;
+            const qty = item ? item.quantity : 0;
             if (qty === 0) applyOutOfStockStyle(cell);
             else applyTextStyle(cell);
           }
@@ -245,7 +276,10 @@ export async function generateStockTable(
     const deviceBrands = input.brands.filter((b) => b.categoryId === devicesCat.id);
     for (const format of input.formats.filter((f) => deviceBrands.some((b) => b.id === f.brandId))) {
       const brand = input.brands.find((b) => b.id === format.brandId);
-      const flavors = input.flavors.filter((f) => f.productFormatId === format.id);
+      const flavors = dedupeFlavorsForFormat(
+        input.flavors.filter((f) => f.productFormatId === format.id),
+        stockMap
+      );
       const priceStr = priceInline(format.unitPrice);
       const formatCell = ws.getRow(row).getCell(1);
       formatCell.value = `${format.name}${priceStr}`;
@@ -254,7 +288,7 @@ export async function generateStockTable(
       for (const fl of flavors) {
         const cell = ws.getRow(row).getCell(1);
         cell.value = fl.name;
-        const qty = stockMap.get(fl.id) ?? 0;
+        const qty = fl.quantity;
         if (qty === 0) applyOutOfStockStyle(cell);
         else applyTextStyle(cell);
         row++;
@@ -286,14 +320,17 @@ export async function generateStockTable(
       applyBrandStyle(brandCell);
       row++;
       for (const format of input.formats.filter((f) => f.brandId === brand.id)) {
-        const flavors = input.flavors.filter((f) => f.productFormatId === format.id);
+        const flavors = dedupeFlavorsForFormat(
+          input.flavors.filter((f) => f.productFormatId === format.id),
+          stockMap
+        );
         if (flavors.length > 0) {
           for (const fl of flavors) {
             const c1 = ws.getRow(row).getCell(1);
             const c2 = ws.getRow(row).getCell(2);
             c1.value = dedupeLeadingBrandInLine(brand.name, `${format.name} ${fl.name}`.trim());
             c2.value = format.unitPrice ? priceOnly(format.unitPrice) : '';
-            const qty = stockMap.get(fl.id) ?? 0;
+            const qty = fl.quantity;
             if (qty === 0) applyOutOfStockStyle(c1);
             else applyTextStyle(c1);
             applyTextStyle(c2);
@@ -328,7 +365,10 @@ export async function generateStockTable(
     const dispBrands = input.brands.filter((b) => b.categoryId === disposablesCat.id);
     for (const brand of dispBrands) {
       for (const format of input.formats.filter((f) => f.brandId === brand.id)) {
-        const flavors = input.flavors.filter((f) => f.productFormatId === format.id);
+        const flavors = dedupeFlavorsForFormat(
+          input.flavors.filter((f) => f.productFormatId === format.id),
+          stockMap
+        );
         const priceStr = priceInline(format.unitPrice);
         const formatCell = ws.getRow(row).getCell(1);
         formatCell.value = `${joinBrandName(brand.name, format.name)}${priceStr}`;
@@ -337,7 +377,7 @@ export async function generateStockTable(
         for (const fl of flavors) {
           const cell = ws.getRow(row).getCell(1);
           cell.value = joinBrandName(brand.name, fl.name);
-          const qty = stockMap.get(fl.id) ?? 0;
+          const qty = fl.quantity;
           if (qty === 0) applyOutOfStockStyle(cell);
           else applyTextStyle(cell);
           row++;
