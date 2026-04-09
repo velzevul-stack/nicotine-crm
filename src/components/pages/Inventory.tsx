@@ -11,6 +11,7 @@ import { ScanModal } from '@/components/inventory/ScanModal';
 import { EditItemModal } from '@/components/inventory/EditItemModal';
 import { EditBrandModal } from '@/components/inventory/EditBrandModal';
 import { ReceiveModal } from '@/components/inventory/ReceiveModal';
+import { StockMovementsPanel } from '@/components/inventory/StockMovementsPanel';
 import { FilterModal } from '@/components/inventory/FilterModal';
 import { SellReservationModal } from '@/components/inventory/SellReservationModal';
 import { CategoriesManager } from '@/components/inventory/CategoriesManager';
@@ -307,6 +308,8 @@ export function Inventory() {
             Приём товара
           </Button>
         </section>
+
+        <StockMovementsPanel items={items} />
 
         <section className="space-y-6 pb-20">
           {isLoading ? (
