@@ -12,6 +12,7 @@ import {
 } from '@/lib/db/entities';
 import { In } from 'typeorm';
 import { z } from 'zod';
+import { logStockMovement } from '@/lib/stock-movement-log';
 
 const itemSchema = z.object({
   flavorId: z.string().uuid(),
@@ -165,9 +166,8 @@ export async function POST(request: NextRequest) {
       const stock = await em.getRepository(StockItemEntity).findOne({
         where: { shopId: session.shopId, flavorId: it.flavorId },
       });
-      const totalQuantity = stock?.quantity ?? 0;
-      const reservedQuantity = stock?.reservedQuantity ?? 0;
-      const available = totalQuantity - reservedQuantity;
+      const warehouseAvailable = Math.max(0, (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0));
+      const available = warehouseAvailable;
       
       if (isReservation) {
         // For reservations, check total quantity (can reserve from unreserved stock)
@@ -244,9 +244,28 @@ export async function POST(request: NextRequest) {
         // For reservations, move quantity to reservedQuantity
         stock.reservedQuantity = (stock.reservedQuantity ?? 0) + it.quantity;
       } else {
-        // For regular sales, deduct from quantity
+        // post is a client-facing mirror of total stock, not a separate zone.
+        const beforeQty = stock.quantity;
         stock.quantity -= it.quantity;
+        stock.postQuantity = stock.quantity;
+        await logStockMovement(em, {
+          shopId: session.shopId,
+          productId: it.flavorId,
+          productName: `${it.productNameSnapshot} ${it.flavorNameSnapshot}`.trim(),
+          actionType: paymentType === 'debt' ? 'debt_sale' : 'sale',
+          fromZone: 'warehouse',
+          toZone: null,
+          quantity: it.quantity,
+          postStockBefore: beforeQty,
+          postStockAfter: stock.quantity,
+          warehouseBefore: beforeQty,
+          warehouseAfter: stock.quantity,
+          contextType: paymentType === 'debt' ? 'debt' : 'sale',
+          contextId: sale.id,
+          comment: paymentType === 'debt' ? `Долг #${sale.id.slice(0, 8)}` : `Чек #${sale.id.slice(0, 8)}`,
+        });
       }
+      if (isReservation) stock.postQuantity = stock.quantity;
       await em.getRepository(StockItemEntity).save(stock);
     }
 

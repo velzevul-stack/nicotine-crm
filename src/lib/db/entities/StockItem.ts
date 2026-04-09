@@ -5,6 +5,7 @@ export interface StockItem {
   shopId: string;
   flavorId: string;
   quantity: number;
+  postQuantity: number;
   reservedQuantity: number;
   costPrice: number;
   packCost: number | null;
@@ -23,6 +24,7 @@ export const StockItemEntity = new EntitySchema<StockItem>({
     shopId: { type: 'uuid' },
     flavorId: { type: 'uuid' },
     quantity: { type: Number, default: 0 },
+    postQuantity: { type: Number, default: 0 },
     reservedQuantity: { type: Number, default: 0 },
     costPrice: { type: Number, default: 0 },
     packCost: { type: Number, nullable: true },

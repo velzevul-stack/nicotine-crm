@@ -147,7 +147,7 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
   });
 
   const updateStock = useMutation({
-    mutationFn: (payload: { flavorId: string; quantity: number; costPrice?: number }) =>
+    mutationFn: (payload: { flavorId: string; quantity: number; postQuantity?: number; costPrice?: number; actionType?: string; comment?: string }) =>
       api('/api/inventory/stock', { method: 'PATCH', body: payload }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -302,13 +302,15 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
       const brands = Array.isArray(inventory?.brands) ? inventory.brands : [];
       
       for (const ri of receiveItems) {
-        const payload: { flavorId: string; quantity: number; costPrice?: number } = {
+        const payload: { flavorId: string; quantity: number; postQuantity?: number; costPrice?: number; actionType: string; comment?: string } = {
           flavorId: ri.flavorId,
           quantity: ri.currentQty + ri.addQty,
+          actionType: 'receipt_to_warehouse',
         };
         if (ri.customCostPrice != null && ri.customCostPrice > 0) {
           payload.costPrice = ri.customCostPrice;
         }
+        payload.comment = `Приемка: +${ri.addQty} шт`;
         await updateStock.mutateAsync(payload);
         
         // Формируем детальное сообщение для каждого товара

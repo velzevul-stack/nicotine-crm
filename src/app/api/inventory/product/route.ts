@@ -9,6 +9,7 @@ import {
   StockItemEntity,
 } from '@/lib/db/entities';
 import { z } from 'zod';
+import { logStockMovement, resolveProductUiName } from '@/lib/stock-movement-log';
 
 const emptyToUndefined = (v: unknown) =>
   v === '' || v === null || v === undefined ? undefined : v;
@@ -383,23 +384,62 @@ export async function POST(request: NextRequest) {
     });
 
     if (!stock) {
+      const beforeQty = 0;
+      const beforePostQty = 0;
       stock = em.getRepository(StockItemEntity).create({
         shopId,
         flavorId: flavor.id,
         quantity: quantity,
+        postQuantity: quantity,
         costPrice,
         packCost: packCost ?? null,
         piecesPerPack: piecesPerPack ?? null,
         costPerPiece: costPerPiece ?? null,
       });
+      await em.getRepository(StockItemEntity).save(stock);
+      if (quantity > 0) {
+        await logStockMovement(em, {
+          shopId,
+          productId: flavor.id,
+          productName: await resolveProductUiName(em, shopId, flavor.id),
+          actionType: 'receipt_to_warehouse',
+          fromZone: null,
+          toZone: 'warehouse',
+          quantity,
+          postStockBefore: beforePostQty,
+          postStockAfter: stock.postQuantity ?? quantity,
+          warehouseBefore: beforeQty,
+          warehouseAfter: quantity,
+          comment: 'Приемка товара',
+        });
+      }
     } else {
+      const beforeQty = stock.quantity;
+      const beforePostQty = stock.postQuantity ?? stock.quantity;
       stock.quantity += quantity;
+      stock.postQuantity = stock.quantity;
       stock.costPrice = costPrice; // Update cost price to latest
       if (typeof packCost === 'number') stock.packCost = packCost;
       if (typeof piecesPerPack === 'number') stock.piecesPerPack = piecesPerPack;
       if (typeof costPerPiece === 'number') stock.costPerPiece = costPerPiece;
+      await em.getRepository(StockItemEntity).save(stock);
+      if (quantity > 0) {
+        await logStockMovement(em, {
+          shopId,
+          productId: flavor.id,
+          productName: await resolveProductUiName(em, shopId, flavor.id),
+          actionType: 'receipt_to_warehouse',
+          fromZone: null,
+          toZone: 'warehouse',
+          quantity,
+          postStockBefore: beforePostQty,
+          postStockAfter: stock.postQuantity ?? stock.quantity,
+          warehouseBefore: beforeQty,
+          warehouseAfter: stock.quantity,
+          comment: 'Приемка товара',
+        });
+      }
     }
-    await em.getRepository(StockItemEntity).save(stock);
 
     return NextResponse.json({ success: true, flavorId: flavor.id });
     });

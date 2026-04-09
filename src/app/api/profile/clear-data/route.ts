@@ -12,6 +12,7 @@ import {
   BrandEntity,
   CategoryEntity,
 } from '@/lib/db/entities';
+import { logStockMovement } from '@/lib/stock-movement-log';
 
 export async function POST() {
   const session = await getSession();
@@ -68,7 +69,27 @@ export async function POST() {
         .where('shopId = :shopId', { shopId })
         .execute();
 
-      // 5. Удаляем остатки (StockItemEntity)
+      // 5. Фиксируем и удаляем остатки (StockItemEntity)
+      const stocks = await em.getRepository(StockItemEntity).find({
+        where: { shopId },
+      });
+      for (const st of stocks) {
+        if ((st.quantity ?? 0) > 0) {
+          await logStockMovement(em, {
+            shopId,
+            productId: st.flavorId,
+            actionType: 'clear_stock',
+            fromZone: 'warehouse',
+            toZone: null,
+            quantity: st.quantity,
+            postStockBefore: st.quantity,
+            postStockAfter: 0,
+            warehouseBefore: st.quantity,
+            warehouseAfter: 0,
+            comment: 'Полная очистка остатков',
+          });
+        }
+      }
       await em
         .createQueryBuilder()
         .delete()
@@ -107,6 +128,7 @@ export async function POST() {
         .from(CategoryEntity)
         .where('shopId = :shopId', { shopId })
         .execute();
+
     });
 
     return NextResponse.json({ message: 'Все данные успешно удалены' });

@@ -1,6 +1,7 @@
 /** Доступно к продаже / резерву: остаток минус уже зарезервированное. */
 export function flavorAvailableQuantity(flavor: {
   quantity?: number | null;
+  postQuantity?: number | null;
   reservedQuantity?: number | null;
 }): number {
   const q = Number(flavor.quantity) || 0;

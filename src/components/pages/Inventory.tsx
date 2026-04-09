@@ -26,6 +26,7 @@ interface TreeItem {
   format: any;
   flavor: any;
   quantity: number;
+  postQuantity?: number;
   reservedQuantity: number;
   costPrice: number;
   barcode: string | null;
@@ -84,7 +85,7 @@ export function Inventory() {
   });
 
   const updateStock = useMutation({
-    mutationFn: (payload: { flavorId: string; quantity: number }) =>
+    mutationFn: (payload: { flavorId: string; quantity: number; postQuantity?: number; actionType?: string; comment?: string }) =>
       api('/api/inventory/stock', { method: 'PATCH', body: payload }),
     onSuccess: (_, variables) => {
       // Инвалидируем все запросы инвентаря (с фильтрами и без)
@@ -127,7 +128,12 @@ export function Inventory() {
     const item = data?.items.find((t) => t.flavor.id === flavorId);
     if (!item) return;
     const newQty = Math.max(0, item.quantity + delta);
-    updateStock.mutate({ flavorId, quantity: newQty });
+    updateStock.mutate({
+      flavorId,
+      quantity: newQty,
+      actionType: delta > 0 ? 'manual_transfer' : 'manual_decrease',
+      comment: delta > 0 ? 'Ручное увеличение остатка' : 'Ручное уменьшение остатка',
+    });
   };
 
   const items = Array.isArray(data?.items) ? data.items : [];

@@ -10,6 +10,7 @@ import {
   FlavorEntity,
 } from '@/lib/db/entities';
 import { z } from 'zod';
+import { logStockMovement } from '@/lib/stock-movement-log';
 
 const updateSchema = z.object({
   paymentType: z.enum(['cash', 'card', 'split', 'debt']).optional(),
@@ -102,6 +103,7 @@ export async function PATCH(
     const oldItems = await em.getRepository(SaleItemEntity).find({
       where: { saleId: sale.id },
     });
+    const effectivePaymentType = parsed.data.paymentType ?? sale.paymentType;
 
     // If items are being updated, recalculate totals and restore stock
     if (parsed.data.items !== undefined) {
@@ -112,9 +114,45 @@ export async function PATCH(
         });
         if (stock) {
           if (sale.isReservation) {
+            const beforeReserved = stock.reservedQuantity ?? 0;
             stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - oldItem.quantity);
+            await logStockMovement(em, {
+              shopId: session.shopId,
+              productId: oldItem.flavorId,
+              productName: `${oldItem.productNameSnapshot} ${oldItem.flavorNameSnapshot}`.trim(),
+              actionType: 'cancel_sale',
+              fromZone: 'warehouse',
+              toZone: 'warehouse',
+              quantity: oldItem.quantity,
+              postStockBefore: stock.postQuantity ?? 0,
+              postStockAfter: stock.postQuantity ?? 0,
+              warehouseBefore: stock.quantity,
+              warehouseAfter: stock.quantity,
+              contextType: 'reservation',
+              contextId: sale.id,
+              comment: `Снятие резерва (редактирование) #${sale.id.slice(0, 8)}: ${beforeReserved} -> ${stock.reservedQuantity ?? 0}`,
+            });
           } else {
+            const beforeQty = stock.quantity;
+            const beforePostQty = stock.postQuantity ?? 0;
             stock.quantity += oldItem.quantity;
+            stock.postQuantity = stock.quantity;
+            await logStockMovement(em, {
+              shopId: session.shopId,
+              productId: oldItem.flavorId,
+              productName: `${oldItem.productNameSnapshot} ${oldItem.flavorNameSnapshot}`.trim(),
+              actionType: 'cancel_sale',
+              fromZone: null,
+              toZone: 'warehouse',
+              quantity: oldItem.quantity,
+              postStockBefore: beforePostQty,
+              postStockAfter: stock.postQuantity,
+              warehouseBefore: beforeQty,
+              warehouseAfter: stock.quantity,
+              contextType: effectivePaymentType === 'debt' ? 'debt' : 'sale',
+              contextId: sale.id,
+              comment: `Отмена (редактирование) чека #${sale.id.slice(0, 8)}`,
+            });
           }
           await em.getRepository(StockItemEntity).save(stock);
         }
@@ -137,9 +175,7 @@ export async function PATCH(
         const stock = await em.getRepository(StockItemEntity).findOne({
           where: { shopId: session.shopId, flavorId: it.flavorId },
         });
-        const available = sale.isReservation
-          ? (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0)
-          : (stock?.quantity ?? 0);
+        const available = Math.max(0, (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0));
         if (available < it.quantity) {
           throw new Error(
             `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${available})`
@@ -190,8 +226,27 @@ export async function PATCH(
 
         if (sale.isReservation) {
           stock.reservedQuantity = (stock.reservedQuantity ?? 0) + it.quantity;
+          stock.postQuantity = stock.quantity;
         } else {
+          const beforeQty = stock.quantity;
           stock.quantity -= it.quantity;
+          stock.postQuantity = stock.quantity;
+          await logStockMovement(em, {
+            shopId: session.shopId,
+            productId: it.flavorId,
+            productName: `${it.productNameSnapshot} ${it.flavorNameSnapshot}`.trim(),
+            actionType: effectivePaymentType === 'debt' ? 'debt_sale' : 'sale',
+            fromZone: 'warehouse',
+            toZone: null,
+            quantity: it.quantity,
+            postStockBefore: beforeQty,
+            postStockAfter: stock.quantity,
+            warehouseBefore: beforeQty,
+            warehouseAfter: stock.quantity,
+            contextType: effectivePaymentType === 'debt' ? 'debt' : 'sale',
+            contextId: sale.id,
+            comment: `Редактирование чека #${sale.id.slice(0, 8)}`,
+          });
         }
         await em.getRepository(StockItemEntity).save(stock);
       }
@@ -331,9 +386,45 @@ export async function DELETE(
       });
       if (stock) {
         if (sale.isReservation) {
+          const beforeReserved = stock.reservedQuantity ?? 0;
           stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
+          await logStockMovement(em, {
+            shopId: session.shopId,
+            productId: item.flavorId,
+            productName: `${item.productNameSnapshot} ${item.flavorNameSnapshot}`.trim(),
+            actionType: 'cancel_sale',
+            fromZone: 'warehouse',
+            toZone: 'warehouse',
+            quantity: item.quantity,
+            postStockBefore: stock.postQuantity ?? 0,
+            postStockAfter: stock.postQuantity ?? 0,
+            warehouseBefore: stock.quantity,
+            warehouseAfter: stock.quantity,
+            contextType: 'reservation',
+            contextId: sale.id,
+            comment: `Отмена резерва #${sale.id.slice(0, 8)}: ${beforeReserved} -> ${stock.reservedQuantity ?? 0}`,
+          });
         } else {
+          const beforeQty = stock.quantity;
+          const beforePostQty = stock.postQuantity ?? 0;
           stock.quantity += item.quantity;
+          stock.postQuantity = stock.quantity;
+          await logStockMovement(em, {
+            shopId: session.shopId,
+            productId: item.flavorId,
+            productName: `${item.productNameSnapshot} ${item.flavorNameSnapshot}`.trim(),
+            actionType: 'cancel_sale',
+            fromZone: null,
+            toZone: 'warehouse',
+            quantity: item.quantity,
+            postStockBefore: beforePostQty,
+            postStockAfter: stock.postQuantity,
+            warehouseBefore: beforeQty,
+            warehouseAfter: stock.quantity,
+            contextType: sale.paymentType === 'debt' ? 'debt' : 'sale',
+            contextId: sale.id,
+            comment: `Отмена чека #${sale.id.slice(0, 8)}`,
+          });
         }
         await em.getRepository(StockItemEntity).save(stock);
       }

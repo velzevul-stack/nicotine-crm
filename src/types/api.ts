@@ -23,6 +23,8 @@ export interface Flavor {
   color: string | null;
   barcode: string | null;
   quantity?: number;
+  postQuantity?: number;
+  reservedQuantity?: number;
 }
 
 export interface ProductFormat {
@@ -55,6 +57,7 @@ export interface InventoryItem {
   format: ProductFormat;
   flavor: Flavor;
   quantity: number;
+  postQuantity?: number;
   reservedQuantity: number;
   costPrice: number;
   barcode: string | null;

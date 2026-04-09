@@ -5,7 +5,7 @@ export { CategoryEntity, type CategoryField } from './Category';
 export { BrandEntity } from './Brand';
 export { ProductFormatEntity } from './ProductFormat';
 export { FlavorEntity } from './Flavor';
-export { StockItemEntity } from './StockItem';
+export { StockItemEntity, type StockItem } from './StockItem';
 export { SaleEntity, type Sale } from './Sale';
 export { SaleItemEntity, type SaleItem } from './SaleItem';
 export { DebtEntity } from './Debt';
@@ -18,3 +18,10 @@ export { SystemSettingsEntity } from './SystemSettings';
 export { CardEntity } from './Card';
 export { CryptoPaymentEntity, type CryptoPayment } from './CryptoPayment';
 export { ReferralEarningEntity, type ReferralEarning } from './ReferralEarning';
+export {
+  StockMovementEntity,
+  type StockMovement,
+  type StockMovementActionType,
+  type StockMovementContextType,
+  type StockZone,
+} from './StockMovement';

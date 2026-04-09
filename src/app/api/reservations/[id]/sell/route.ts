@@ -8,6 +8,7 @@ import {
   DebtEntity,
   DebtOperationEntity,
 } from '@/lib/db/entities';
+import { logStockMovement } from '@/lib/stock-movement-log';
 
 export async function POST(
   request: NextRequest,
@@ -42,8 +43,26 @@ export async function POST(
       });
       if (stock) {
         // Remove from reserved, deduct from total quantity
+        const beforeQty = stock.quantity;
         stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
         stock.quantity = Math.max(0, stock.quantity - item.quantity);
+        stock.postQuantity = stock.quantity;
+        await logStockMovement(em, {
+          shopId: session.shopId,
+          productId: item.flavorId,
+          productName: `${item.productNameSnapshot} ${item.flavorNameSnapshot}`.trim(),
+          actionType: 'reservation_sale',
+          fromZone: 'warehouse',
+          toZone: null,
+          quantity: item.quantity,
+          postStockBefore: beforeQty,
+          postStockAfter: stock.quantity,
+          warehouseBefore: beforeQty,
+          warehouseAfter: stock.quantity,
+          contextType: 'reservation',
+          contextId: reservation.id,
+          comment: `Продажа резерва #${reservation.id.slice(0, 8)}`,
+        });
         await em.getRepository(StockItemEntity).save(stock);
       }
     }
