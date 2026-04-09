@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
               .map((flavor) => {
                 const stock = stockMap.get(flavor.id);
                 const quantity = stock?.quantity ?? 0;
-                const postQuantity = stock?.quantity ?? 0;
+                const postQuantity = stock?.postQuantity ?? 0;
                 const reservedQuantity = stock?.reservedQuantity ?? 0;
                 const costPrice = stock?.costPrice ?? 0;
                 
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
     return {
       ...f,
       quantity: stock?.quantity ?? 0,
-      postQuantity: stock?.quantity ?? 0,
+      postQuantity: stock?.postQuantity ?? 0,
       reservedQuantity: stock?.reservedQuantity ?? 0,
     };
   });

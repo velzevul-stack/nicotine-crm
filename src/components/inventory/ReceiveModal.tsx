@@ -126,6 +126,7 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [showScanCamera, setShowScanCamera] = useState(false);
   const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
+  const [isReceiving, setIsReceiving] = useState(false);
   
   // New Item Creation State
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -146,17 +147,24 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
     queryFn: () => api<{ currency: string }>('/api/shop'),
   });
 
-  const updateStock = useMutation({
-    mutationFn: (payload: { flavorId: string; quantity: number; postQuantity?: number; costPrice?: number; actionType?: string; comment?: string }) =>
-      api('/api/inventory/stock', { method: 'PATCH', body: payload }),
+  type ReceiveBatchLine = {
+    flavorId: string;
+    quantity: number;
+    costPrice?: number;
+    comment?: string;
+  };
+
+  const receiveBatch = useMutation({
+    mutationFn: (items: ReceiveBatchLine[]) =>
+      api<{ items: unknown[] }>('/api/inventory/stock/batch', { method: 'POST', body: { items } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: (err: Error) => {
       toast({
-        title: 'Ошибка обновления',
-        description: err.message || 'Не удалось обновить остаток',
+        title: 'Ошибка приёмки',
+        description: err.message || 'Не удалось провести приёмку',
         variant: 'destructive',
       });
     },
@@ -286,7 +294,9 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
   }, [open, inventory?.flavors]);
 
   const confirmReceive = async () => {
+    if (isReceiving || receiveBatch.isPending) return;
     try {
+      setIsReceiving(true);
       if (receiveItems.some((ri) => ri.customCostPrice != null && ri.customCostPrice < 0)) {
         toast({
           title: 'Ошибка',
@@ -301,27 +311,29 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
       const productFormats = Array.isArray(inventory?.productFormats) ? inventory.productFormats : [];
       const brands = Array.isArray(inventory?.brands) ? inventory.brands : [];
       
-      for (const ri of receiveItems) {
-        const payload: { flavorId: string; quantity: number; postQuantity?: number; costPrice?: number; actionType: string; comment?: string } = {
+      const batchLines: ReceiveBatchLine[] = receiveItems.map((ri) => {
+        const line: ReceiveBatchLine = {
           flavorId: ri.flavorId,
           quantity: ri.currentQty + ri.addQty,
-          actionType: 'receipt_to_warehouse',
+          comment: `Приёмка: +${ri.addQty} шт`,
         };
         if (ri.customCostPrice != null && ri.customCostPrice > 0) {
-          payload.costPrice = ri.customCostPrice;
+          line.costPrice = ri.customCostPrice;
         }
-        payload.comment = `Приемка: +${ri.addQty} шт`;
-        await updateStock.mutateAsync(payload);
-        
-        // Формируем детальное сообщение для каждого товара
+        return line;
+      });
+
+      await receiveBatch.mutateAsync(batchLines);
+
+      for (const ri of receiveItems) {
         const flavor = flavors.find((f: any) => f.id === ri.flavorId);
         const format = flavor ? productFormats.find((pf: any) => pf.id === flavor.productFormatId) : null;
         const brand = format ? brands.find((b: any) => b.id === format.brandId) : null;
-        
+
         const brandName = brand?.name || '';
         const formatName = ri.formatName || format?.name || '';
         const flavorName = ri.name || '';
-        
+
         itemsDetails.push(`Товар ${brandName} ${formatName} ${flavorName} добавлен на склад (${ri.addQty} шт)`);
       }
       
@@ -338,6 +350,8 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
       });
     } catch (e) {
       toast({ title: "Ошибка", variant: "destructive" });
+    } finally {
+      setIsReceiving(false);
     }
   };
 
@@ -423,7 +437,13 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
                       autoComplete="off"
                     />
                   </div>
-                  <Button type="button" variant="outline" size="icon" onClick={() => setShowScanCamera(true)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowScanCamera(true)}
+                    aria-label="Камера для сканирования штрихкода"
+                  >
                     <ScanLine size={18} />
                   </Button>
                 </form>
@@ -494,6 +514,7 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
                     </div>
                   ) : (
                     receiveItems.map((item) => {
+                      const lineLabel = `${item.brandEmoji} ${item.formatName} ${item.name}`.replace(/\s+/g, ' ').trim();
                       const curSym = getCurrencySymbol(shopData?.currency);
                       const previewText = `${item.brandEmoji}${item.formatName}${item.formatStrengthLabel ? ' ' + item.formatStrengthLabel : ''}${item.brandEmoji}: (${item.formatUnitPrice || 0} ${curSym})\n• ${item.name}`;
                       
@@ -537,14 +558,32 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
                               )}
                             </div>
                             <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReceiveItems(prev => prev.map(i => i.flavorId === item.flavorId ? { ...i, addQty: Math.max(1, i.addQty - 1) } : i))}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10"
+                                aria-label={`Уменьшить количество: ${lineLabel}`}
+                                onClick={() => setReceiveItems(prev => prev.map(i => i.flavorId === item.flavorId ? { ...i, addQty: Math.max(1, i.addQty - 1) } : i))}
+                              >
                                 <Minus size={12} />
                               </Button>
-                              <span className="text-sm font-mono-nums w-4 text-center font-semibold text-success">{item.addQty}</span>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReceiveItems(prev => prev.map(i => i.flavorId === item.flavorId ? { ...i, addQty: i.addQty + 1 } : i))}>
+                              <span className="text-sm font-mono-nums w-8 text-center font-semibold text-success">{item.addQty}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10"
+                                aria-label={`Увеличить количество: ${lineLabel}`}
+                                onClick={() => setReceiveItems(prev => prev.map(i => i.flavorId === item.flavorId ? { ...i, addQty: i.addQty + 1 } : i))}
+                              >
                                 <Plus size={12} />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setReceiveItems(prev => prev.filter(i => i.flavorId !== item.flavorId))}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10 text-destructive"
+                                aria-label={`Удалить из приёмки: ${lineLabel}`}
+                                onClick={() => setReceiveItems(prev => prev.filter(i => i.flavorId !== item.flavorId))}
+                              >
                                 <X size={12} />
                               </Button>
                             </div>
@@ -582,7 +621,11 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
             </TabsContent>
 
             <div className="p-4 border-t bg-background/50 backdrop-blur-sm">
-              <Button className="w-full gradient-primary" onClick={confirmReceive} disabled={receiveItems.length === 0}>
+              <Button
+                className="w-full gradient-primary"
+                onClick={confirmReceive}
+                disabled={receiveItems.length === 0 || isReceiving || receiveBatch.isPending}
+              >
                 Принять ({receiveItems.reduce((s, i) => s + i.addQty, 0)} шт)
               </Button>
             </div>

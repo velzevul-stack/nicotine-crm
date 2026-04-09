@@ -8,6 +8,14 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
     await queryRunner.query(`ALTER TABLE "stock_items" ADD COLUMN IF NOT EXISTS "packCost" double precision`);
     await queryRunner.query(`ALTER TABLE "stock_items" ADD COLUMN IF NOT EXISTS "piecesPerPack" integer`);
     await queryRunner.query(`ALTER TABLE "stock_items" ADD COLUMN IF NOT EXISTS "costPerPiece" double precision`);
+    await queryRunner.query(
+      `ALTER TABLE "stock_items" ADD COLUMN IF NOT EXISTS "postQuantity" integer NOT NULL DEFAULT 0`
+    );
+    await queryRunner.query(`
+      UPDATE "stock_items"
+      SET "postQuantity" = "quantity"
+      WHERE coalesce("postQuantity", 0) = 0 AND coalesce("quantity", 0) > 0
+    `);
 
     await queryRunner.query(`
       UPDATE "flavors"
@@ -107,6 +115,7 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
           s."flavorId",
           SUM(coalesce(s."quantity", 0)) AS total_quantity,
           SUM(coalesce(s."reservedQuantity", 0)) AS total_reserved,
+          SUM(coalesce(s."postQuantity", 0)) AS total_post,
           MAX(coalesce(s."costPrice", 0)) AS merged_cost
         FROM "stock_items" s
         JOIN grouped g
@@ -118,6 +127,7 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
       SET
         "quantity" = t.total_quantity,
         "reservedQuantity" = t.total_reserved,
+        "postQuantity" = t.total_post,
         "costPrice" = t.merged_cost
       FROM totals t
       WHERE s."id" = t.keep_id
@@ -149,7 +159,7 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
         FROM "flavors"
         WHERE "normalizedName" IS NOT NULL
         ORDER BY "shopId", "productFormatId", "normalizedName", "createdAt" ASC, "id" ASC
-      ),
+       ),
       dup AS (
         SELECT f."id" AS old_id, fg.keep_id
         FROM "flavors" f

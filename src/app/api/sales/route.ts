@@ -62,6 +62,14 @@ const createSchema = z.object({
   items: z.array(itemSchema).min(1),
 });
 
+function getWarehouseAvailable(stock: StockItemEntity | null): number {
+  return Math.max(0, (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0));
+}
+
+function getPostAvailable(stock: StockItemEntity | null): number {
+  return Math.max(0, stock?.postQuantity ?? 0);
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -165,22 +173,21 @@ export async function POST(request: NextRequest) {
       
       const stock = await em.getRepository(StockItemEntity).findOne({
         where: { shopId: session.shopId, flavorId: it.flavorId },
+        lock: { mode: 'pessimistic_write' },
       });
-      const warehouseAvailable = Math.max(0, (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0));
-      const available = warehouseAvailable;
+      const warehouseAvailable = getWarehouseAvailable(stock);
+      const postAvailable = getPostAvailable(stock);
       
       if (isReservation) {
-        // For reservations, check total quantity (can reserve from unreserved stock)
-        if (available < it.quantity) {
+        if (warehouseAvailable < it.quantity || postAvailable < it.quantity) {
           throw new Error(
-            `Недостаточно товара для резерва: ${it.flavorNameSnapshot} (доступно ${available})`
+            `Недостаточно товара для резерва: ${it.flavorNameSnapshot} (доступно ${Math.min(warehouseAvailable, postAvailable)})`
           );
         }
       } else {
-        // For regular sales, check available quantity
-        if (available < it.quantity) {
+        if (warehouseAvailable < it.quantity || postAvailable < it.quantity) {
           throw new Error(
-            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${available})`
+            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${Math.min(warehouseAvailable, postAvailable)})`
           );
         }
       }
@@ -215,6 +222,7 @@ export async function POST(request: NextRequest) {
     for (const it of items) {
       let stock = await em.getRepository(StockItemEntity).findOne({
         where: { shopId: session.shopId, flavorId: it.flavorId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!stock) {
@@ -241,13 +249,30 @@ export async function POST(request: NextRequest) {
       await em.getRepository(SaleItemEntity).save(si);
 
       if (isReservation) {
-        // For reservations, move quantity to reservedQuantity
+        const beforePostQty = stock.postQuantity ?? 0;
         stock.reservedQuantity = (stock.reservedQuantity ?? 0) + it.quantity;
+        stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
+        await logStockMovement(em, {
+          shopId: session.shopId,
+          productId: it.flavorId,
+          productName: `${it.productNameSnapshot} ${it.flavorNameSnapshot}`.trim(),
+          actionType: 'manual_transfer',
+          fromZone: 'post',
+          toZone: 'warehouse',
+          quantity: it.quantity,
+          postStockBefore: beforePostQty,
+          postStockAfter: stock.postQuantity,
+          warehouseBefore: stock.quantity,
+          warehouseAfter: stock.quantity,
+          contextType: 'reservation',
+          contextId: sale.id,
+          comment: `Резерв #${sale.id.slice(0, 8)}`,
+        });
       } else {
-        // post is a client-facing mirror of total stock, not a separate zone.
         const beforeQty = stock.quantity;
+        const beforePostQty = stock.postQuantity ?? 0;
         stock.quantity -= it.quantity;
-        stock.postQuantity = stock.quantity;
+        stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
         await logStockMovement(em, {
           shopId: session.shopId,
           productId: it.flavorId,
@@ -256,8 +281,8 @@ export async function POST(request: NextRequest) {
           fromZone: 'warehouse',
           toZone: null,
           quantity: it.quantity,
-          postStockBefore: beforeQty,
-          postStockAfter: stock.quantity,
+          postStockBefore: beforePostQty,
+          postStockAfter: stock.postQuantity,
           warehouseBefore: beforeQty,
           warehouseAfter: stock.quantity,
           contextType: paymentType === 'debt' ? 'debt' : 'sale',
@@ -265,7 +290,6 @@ export async function POST(request: NextRequest) {
           comment: paymentType === 'debt' ? `Долг #${sale.id.slice(0, 8)}` : `Чек #${sale.id.slice(0, 8)}`,
         });
       }
-      if (isReservation) stock.postQuantity = stock.quantity;
       await em.getRepository(StockItemEntity).save(stock);
     }
 

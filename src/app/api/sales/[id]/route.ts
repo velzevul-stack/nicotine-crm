@@ -41,6 +41,14 @@ const updateSchema = z.object({
     .optional(),
 });
 
+function getWarehouseAvailable(stock: StockItemEntity | null): number {
+  return Math.max(0, (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0));
+}
+
+function getPostAvailable(stock: StockItemEntity | null): number {
+  return Math.max(0, stock?.postQuantity ?? 0);
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -104,6 +112,7 @@ export async function PATCH(
       where: { saleId: sale.id },
     });
     const effectivePaymentType = parsed.data.paymentType ?? sale.paymentType;
+    const effectiveIsReservation = parsed.data.isReservation ?? sale.isReservation;
 
     // If items are being updated, recalculate totals and restore stock
     if (parsed.data.items !== undefined) {
@@ -111,21 +120,24 @@ export async function PATCH(
       for (const oldItem of oldItems) {
         const stock = await em.getRepository(StockItemEntity).findOne({
           where: { shopId: session.shopId, flavorId: oldItem.flavorId },
+          lock: { mode: 'pessimistic_write' },
         });
         if (stock) {
           if (sale.isReservation) {
+            const beforePostQty = stock.postQuantity ?? 0;
             const beforeReserved = stock.reservedQuantity ?? 0;
             stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - oldItem.quantity);
+            stock.postQuantity = beforePostQty + oldItem.quantity;
             await logStockMovement(em, {
               shopId: session.shopId,
               productId: oldItem.flavorId,
               productName: `${oldItem.productNameSnapshot} ${oldItem.flavorNameSnapshot}`.trim(),
               actionType: 'cancel_sale',
               fromZone: 'warehouse',
-              toZone: 'warehouse',
+              toZone: 'post',
               quantity: oldItem.quantity,
-              postStockBefore: stock.postQuantity ?? 0,
-              postStockAfter: stock.postQuantity ?? 0,
+              postStockBefore: beforePostQty,
+              postStockAfter: stock.postQuantity,
               warehouseBefore: stock.quantity,
               warehouseAfter: stock.quantity,
               contextType: 'reservation',
@@ -136,7 +148,7 @@ export async function PATCH(
             const beforeQty = stock.quantity;
             const beforePostQty = stock.postQuantity ?? 0;
             stock.quantity += oldItem.quantity;
-            stock.postQuantity = stock.quantity;
+            stock.postQuantity = beforePostQty + oldItem.quantity;
             await logStockMovement(em, {
               shopId: session.shopId,
               productId: oldItem.flavorId,
@@ -174,11 +186,16 @@ export async function PATCH(
         
         const stock = await em.getRepository(StockItemEntity).findOne({
           where: { shopId: session.shopId, flavorId: it.flavorId },
+          lock: { mode: 'pessimistic_write' },
         });
-        const available = Math.max(0, (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0));
-        if (available < it.quantity) {
+        const warehouseAvailable = getWarehouseAvailable(stock);
+        const postAvailable = getPostAvailable(stock);
+        if (
+          warehouseAvailable < it.quantity ||
+          postAvailable < it.quantity
+        ) {
           throw new Error(
-            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${available})`
+            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${Math.min(warehouseAvailable, postAvailable)})`
           );
         }
       }
@@ -206,6 +223,7 @@ export async function PATCH(
       for (const it of parsed.data.items) {
         const stock = await em.getRepository(StockItemEntity).findOne({
           where: { shopId: session.shopId, flavorId: it.flavorId },
+          lock: { mode: 'pessimistic_write' },
         });
 
         if (!stock) {
@@ -224,13 +242,31 @@ export async function PATCH(
         });
         await em.getRepository(SaleItemEntity).save(si);
 
-        if (sale.isReservation) {
+        if (effectiveIsReservation) {
+          const beforePostQty = stock.postQuantity ?? 0;
           stock.reservedQuantity = (stock.reservedQuantity ?? 0) + it.quantity;
-          stock.postQuantity = stock.quantity;
+          stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
+          await logStockMovement(em, {
+            shopId: session.shopId,
+            productId: it.flavorId,
+            productName: `${it.productNameSnapshot} ${it.flavorNameSnapshot}`.trim(),
+            actionType: 'manual_transfer',
+            fromZone: 'post',
+            toZone: 'warehouse',
+            quantity: it.quantity,
+            postStockBefore: beforePostQty,
+            postStockAfter: stock.postQuantity,
+            warehouseBefore: stock.quantity,
+            warehouseAfter: stock.quantity,
+            contextType: 'reservation',
+            contextId: sale.id,
+            comment: `Резерв (редактирование) #${sale.id.slice(0, 8)}`,
+          });
         } else {
           const beforeQty = stock.quantity;
+          const beforePostQty = stock.postQuantity ?? 0;
           stock.quantity -= it.quantity;
-          stock.postQuantity = stock.quantity;
+          stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
           await logStockMovement(em, {
             shopId: session.shopId,
             productId: it.flavorId,
@@ -239,8 +275,8 @@ export async function PATCH(
             fromZone: 'warehouse',
             toZone: null,
             quantity: it.quantity,
-            postStockBefore: beforeQty,
-            postStockAfter: stock.quantity,
+            postStockBefore: beforePostQty,
+            postStockAfter: stock.postQuantity,
             warehouseBefore: beforeQty,
             warehouseAfter: stock.quantity,
             contextType: effectivePaymentType === 'debt' ? 'debt' : 'sale',
@@ -266,7 +302,7 @@ export async function PATCH(
         sale.cardAmount = sale.finalAmount;
       } else if (sale.paymentType === 'debt') {
         sale.cashAmount = 0;
-        sale.cardAmount = sale.finalAmount;
+        sale.cardAmount = 0;
       }
     }
 
@@ -277,20 +313,35 @@ export async function PATCH(
       if (parsed.data.paymentType === 'split') {
         const cash = parsed.data.cashAmount ?? sale.cashAmount ?? 0;
         const card = parsed.data.cardAmount ?? sale.cardAmount ?? 0;
-        if (Math.abs(cash + card - final) <= 0.01) {
-          sale.cashAmount = cash;
-          sale.cardAmount = card;
+        if (Math.abs(cash + card - final) > 0.01) {
+          return NextResponse.json(
+            { message: 'Сумма наличных и карты должна равняться итоговой сумме' },
+            { status: 400 },
+          );
         }
+        sale.cashAmount = cash;
+        sale.cardAmount = card;
       } else if (parsed.data.paymentType === 'cash') {
         sale.cashAmount = final;
         sale.cardAmount = 0;
-      } else if (parsed.data.paymentType === 'card' || parsed.data.paymentType === 'debt') {
+      } else if (parsed.data.paymentType === 'card') {
         sale.cashAmount = 0;
         sale.cardAmount = final;
+      } else if (parsed.data.paymentType === 'debt') {
+        sale.cashAmount = 0;
+        sale.cardAmount = 0;
       }
     }
-    if (parsed.data.cashAmount !== undefined) sale.cashAmount = parsed.data.cashAmount;
-    if (parsed.data.cardAmount !== undefined) sale.cardAmount = parsed.data.cardAmount;
+    if (sale.paymentType === 'split') {
+      if (parsed.data.cashAmount !== undefined) sale.cashAmount = parsed.data.cashAmount;
+      if (parsed.data.cardAmount !== undefined) sale.cardAmount = parsed.data.cardAmount;
+      if (Math.abs((sale.cashAmount ?? 0) + (sale.cardAmount ?? 0) - final) > 0.01) {
+        return NextResponse.json(
+          { message: 'Для split-оплаты сумма наличных и карты должна совпадать с итогом' },
+          { status: 400 },
+        );
+      }
+    }
     if (parsed.data.cardId !== undefined) sale.cardId = parsed.data.cardId;
     if (parsed.data.comment !== undefined) {
       sale.comment = parsed.data.comment;
@@ -307,6 +358,16 @@ export async function PATCH(
     if (parsed.data.isReservation !== undefined) {
       sale.isReservation = parsed.data.isReservation;
     }
+    if (sale.paymentType === 'debt') {
+      if (!sale.customerName?.trim()) {
+        return NextResponse.json(
+          { message: 'Для продажи в долг укажите имя клиента' },
+          { status: 400 },
+        );
+      }
+      sale.cashAmount = 0;
+      sale.cardAmount = 0;
+    }
     if (parsed.data.reservationExpiry !== undefined) {
       if (parsed.data.reservationExpiry) {
         const dateStr = parsed.data.reservationExpiry;
@@ -319,26 +380,51 @@ export async function PATCH(
     sale.status = 'edited';
     await em.getRepository(SaleEntity).save(sale);
 
-    // Handle debt updates if payment type changed
-    if (parsed.data.paymentType === 'debt' && sale.customerName) {
+    // Keep debt ledgers consistent when payment type/customer/amount changes.
+    const existingOps = await em.getRepository(DebtOperationEntity).find({
+      where: { saleId: sale.id },
+    });
+    if (existingOps.length > 0) {
+      const byDebtId = new Map<string, number>();
+      for (const op of existingOps) {
+        byDebtId.set(op.debtId, (byDebtId.get(op.debtId) ?? 0) + op.amount);
+      }
+      for (const [debtId, amount] of byDebtId.entries()) {
+        const debt = await em.getRepository(DebtEntity).findOne({
+          where: { id: debtId, shopId: session.shopId },
+        });
+        if (debt) {
+          debt.totalDebt = Math.max(0, debt.totalDebt - amount);
+          await em.getRepository(DebtEntity).save(debt);
+        }
+      }
+      await em.getRepository(DebtOperationEntity).delete({ saleId: sale.id });
+    }
+
+    if (sale.paymentType === 'debt' && sale.customerName?.trim()) {
+      const debtCustomer = sale.customerName.trim();
       let debt = await em.getRepository(DebtEntity).findOne({
-        where: { shopId: session.shopId, customerName: sale.customerName.trim() },
+        where: { shopId: session.shopId, customerName: debtCustomer },
       });
       if (!debt) {
         debt = em.getRepository(DebtEntity).create({
           shopId: session.shopId,
-          customerName: sale.customerName.trim(),
+          customerName: debtCustomer,
           totalDebt: 0,
         });
         await em.getRepository(DebtEntity).save(debt);
       }
-      // Recalculate debt based on final amount
-      const existingOps = await em.getRepository(DebtOperationEntity).find({
-        where: { saleId: sale.id },
-      });
-      const existingAmount = existingOps.reduce((s, op) => s + op.amount, 0);
-      debt.totalDebt = debt.totalDebt - existingAmount + sale.finalAmount;
+      debt.totalDebt += sale.finalAmount;
       await em.getRepository(DebtEntity).save(debt);
+
+      const debtOp = em.getRepository(DebtOperationEntity).create({
+        debtId: debt.id,
+        saleId: sale.id,
+        amount: sale.finalAmount,
+        datetime: new Date(),
+        comment: `Редактирование продажи #${sale.id.slice(0, 8)}`,
+      });
+      await em.getRepository(DebtOperationEntity).save(debtOp);
     }
 
     const updatedItems = await em.getRepository(SaleItemEntity).find({
@@ -383,21 +469,24 @@ export async function DELETE(
     for (const item of items) {
       const stock = await em.getRepository(StockItemEntity).findOne({
         where: { shopId: session.shopId, flavorId: item.flavorId },
+        lock: { mode: 'pessimistic_write' },
       });
       if (stock) {
         if (sale.isReservation) {
+          const beforePostQty = stock.postQuantity ?? 0;
           const beforeReserved = stock.reservedQuantity ?? 0;
           stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
+          stock.postQuantity = beforePostQty + item.quantity;
           await logStockMovement(em, {
             shopId: session.shopId,
             productId: item.flavorId,
             productName: `${item.productNameSnapshot} ${item.flavorNameSnapshot}`.trim(),
             actionType: 'cancel_sale',
             fromZone: 'warehouse',
-            toZone: 'warehouse',
+            toZone: 'post',
             quantity: item.quantity,
-            postStockBefore: stock.postQuantity ?? 0,
-            postStockAfter: stock.postQuantity ?? 0,
+            postStockBefore: beforePostQty,
+            postStockAfter: stock.postQuantity,
             warehouseBefore: stock.quantity,
             warehouseAfter: stock.quantity,
             contextType: 'reservation',
@@ -408,7 +497,7 @@ export async function DELETE(
           const beforeQty = stock.quantity;
           const beforePostQty = stock.postQuantity ?? 0;
           stock.quantity += item.quantity;
-          stock.postQuantity = stock.quantity;
+          stock.postQuantity = beforePostQty + item.quantity;
           await logStockMovement(em, {
             shopId: session.shopId,
             productId: item.flavorId,

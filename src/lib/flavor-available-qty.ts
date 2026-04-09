@@ -5,6 +5,7 @@ export function flavorAvailableQuantity(flavor: {
   reservedQuantity?: number | null;
 }): number {
   const q = Number(flavor.quantity) || 0;
+  const p = Number(flavor.postQuantity) || 0;
   const r = Number(flavor.reservedQuantity) || 0;
-  return Math.max(0, q - r);
+  return Math.max(0, Math.min(p, q - r));
 }

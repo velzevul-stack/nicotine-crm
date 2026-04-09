@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -92,6 +92,30 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
   const [toDate, setToDate] = useState<string>('');
   const [limit, setLimit] = useState<number>(100);
   const [showFilters, setShowFilters] = useState(false);
+  const [draftCategoryId, setDraftCategoryId] = useState<string>('all');
+  const [draftActionType, setDraftActionType] = useState<string>('all');
+  const [draftFromDate, setDraftFromDate] = useState<string>('');
+  const [draftToDate, setDraftToDate] = useState<string>('');
+  const [draftLimit, setDraftLimit] = useState<number>(100);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [scrollPaused, setScrollPaused] = useState(false);
+  const scrollPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleHistoryScroll = useCallback(() => {
+    setScrollPaused(true);
+    if (scrollPauseTimerRef.current) clearTimeout(scrollPauseTimerRef.current);
+    scrollPauseTimerRef.current = setTimeout(() => {
+      setScrollPaused(false);
+      scrollPauseTimerRef.current = null;
+    }, 8000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (scrollPauseTimerRef.current) clearTimeout(scrollPauseTimerRef.current);
+    },
+    []
+  );
 
   const fallbackCategoryOptions = useMemo(() => {
     const uniq = new Map<string, string>();
@@ -104,7 +128,7 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
     return Array.from(uniq.entries()).map(([id, name]) => ({ id, name }));
   }, [items]);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['inventory-movements', categoryId, actionType, fromDate, toDate, limit],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -115,9 +139,9 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
       if (toDate) params.set('to', toDate);
       return api<MovementsResponse>(`/api/inventory/movements?${params.toString()}`);
     },
-    refetchInterval: 5000,
+    refetchInterval: autoRefresh && !scrollPaused ? 10000 : false,
     refetchOnWindowFocus: true,
-    staleTime: 2000,
+    staleTime: 5000,
   });
 
   const movements = Array.isArray(data?.rows) ? data.rows : [];
@@ -143,7 +167,14 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
         <Button
           type="button"
           variant="outline"
-          onClick={() => setShowFilters(true)}
+          onClick={() => {
+            setDraftCategoryId(categoryId);
+            setDraftActionType(actionType);
+            setDraftFromDate(fromDate);
+            setDraftToDate(toDate);
+            setDraftLimit(limit);
+            setShowFilters(true);
+          }}
           className="h-10 px-4 rounded-[12px] text-sm font-medium shrink-0"
         >
           Фильтры
@@ -152,12 +183,33 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
 
       <div className="text-xs text-muted-foreground break-words">{filtersSummary}</div>
 
-      {isLoading ? (
+      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none w-fit">
+        <input
+          type="checkbox"
+          className="rounded border-border"
+          checked={autoRefresh}
+          onChange={(e) => setAutoRefresh(e.target.checked)}
+        />
+        Автообновление (10 с)
+      </label>
+
+      {isError && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl border border-destructive/30 bg-destructive/5 text-sm">
+          <span className="text-muted-foreground flex-1">
+            {error instanceof Error ? error.message : 'Не удалось загрузить историю движений'}
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            Повторить
+          </Button>
+        </div>
+      )}
+
+      {isLoading && !data ? (
         <div className="text-sm text-muted-foreground py-6 text-center">Загрузка истории...</div>
-      ) : movements.length === 0 ? (
+      ) : isError && !data ? null : movements.length === 0 ? (
         <div className="text-sm text-muted-foreground py-6 text-center">Записей нет</div>
       ) : (
-        <div className="max-h-[62vh] overflow-y-auto pr-1">
+        <div className="max-h-[62vh] overflow-y-auto pr-1" onScroll={handleHistoryScroll}>
           <div className="space-y-3 md:hidden">
             {movements.map((m) => (
               <div key={m.id} className="rounded-xl border border-border p-3 bg-background space-y-2">
@@ -217,7 +269,7 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
             <DialogTitle>Фильтры истории</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <Select value={categoryId} onValueChange={setCategoryId}>
+            <Select value={draftCategoryId} onValueChange={setDraftCategoryId}>
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Категория" />
               </SelectTrigger>
@@ -229,7 +281,7 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
               </SelectContent>
             </Select>
 
-            <Select value={actionType} onValueChange={setActionType}>
+            <Select value={draftActionType} onValueChange={setDraftActionType}>
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Операция" />
               </SelectTrigger>
@@ -243,18 +295,18 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
 
             <input
               type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              value={draftFromDate}
+              onChange={(e) => setDraftFromDate(e.target.value)}
               className="h-11 w-full rounded-[12px] border border-border bg-muted px-3 text-sm"
             />
             <input
               type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              value={draftToDate}
+              onChange={(e) => setDraftToDate(e.target.value)}
               className="h-11 w-full rounded-[12px] border border-border bg-muted px-3 text-sm"
             />
 
-            <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+            <Select value={String(draftLimit)} onValueChange={(v) => setDraftLimit(Number(v))}>
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Лимит" />
               </SelectTrigger>
@@ -272,6 +324,11 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
                 variant="outline"
                 className="h-11 rounded-[12px]"
                 onClick={() => {
+                  setDraftCategoryId('all');
+                  setDraftActionType('all');
+                  setDraftFromDate('');
+                  setDraftToDate('');
+                  setDraftLimit(100);
                   setCategoryId('all');
                   setActionType('all');
                   setFromDate('');
@@ -281,7 +338,18 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
               >
                 Сбросить
               </Button>
-              <Button type="button" className="h-11 rounded-[12px]" onClick={() => setShowFilters(false)}>
+              <Button
+                type="button"
+                className="h-11 rounded-[12px]"
+                onClick={() => {
+                  setCategoryId(draftCategoryId);
+                  setActionType(draftActionType);
+                  setFromDate(draftFromDate);
+                  setToDate(draftToDate);
+                  setLimit(draftLimit);
+                  setShowFilters(false);
+                }}
+              >
                 Применить
               </Button>
             </div>

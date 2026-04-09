@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
+import { In } from 'typeorm';
 import { SaleEntity, SaleItemEntity } from '@/lib/db/entities';
 
 export async function GET(request: NextRequest) {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
   const items =
     reservationIds.length > 0
       ? await ds.getRepository(SaleItemEntity).find({
-          where: { saleId: reservationIds as any },
+          where: { saleId: In(reservationIds) },
         })
       : [];
 

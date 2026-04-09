@@ -26,8 +26,21 @@ export function FilterModal({
   colors = [],
 }: FilterModalProps) {
   const [showHint, markSeen] = useHintSeen('inventory-filter');
-  const { filters, updateFilters, resetFilters, hasActiveFilters } = useInventoryFilters();
+  const { filters, updateFilters, resetFilters } = useInventoryFilters();
   const [localFilters, setLocalFilters] = useState(filters);
+
+  const hasLocalChanges = JSON.stringify(localFilters) !== JSON.stringify(filters);
+  const hasLocalActiveFilters = [
+    localFilters.inStockOnly,
+    localFilters.noBarcode,
+    localFilters.showReservedOnly,
+    localFilters.selectedCategory !== null,
+    localFilters.selectedStrength !== null,
+    localFilters.selectedBrand !== null,
+    localFilters.selectedColor !== null,
+    localFilters.minPrice !== '',
+    localFilters.maxPrice !== '',
+  ].some(Boolean);
 
   // Синхронизируем локальные фильтры с URL при открытии
   useEffect(() => {
@@ -83,7 +96,7 @@ export function FilterModal({
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-semibold">Фильтры</DialogTitle>
-            {hasActiveFilters && (
+            {hasLocalActiveFilters && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -194,10 +207,10 @@ export function FilterModal({
         </div>
 
         <div className="flex gap-2 pt-4 border-t border-border">
-          <Button variant="outline" onClick={handleReset} className="flex-1" disabled={!hasActiveFilters}>
+          <Button variant="outline" onClick={handleReset} className="flex-1" disabled={!hasLocalActiveFilters}>
             Сбросить
           </Button>
-          <Button onClick={handleApply} className="flex-1 gradient-primary text-primary-foreground">
+          <Button onClick={handleApply} className="flex-1 gradient-primary text-primary-foreground" disabled={!hasLocalChanges}>
             Применить
           </Button>
         </div>

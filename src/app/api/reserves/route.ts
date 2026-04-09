@@ -4,10 +4,48 @@ import { getSession } from '@/lib/auth';
 import { SaleEntity, SaleItemEntity, StockItemEntity } from '@/lib/db/entities';
 import { In } from 'typeorm';
 import { z } from 'zod';
+import { logStockMovement } from '@/lib/stock-movement-log';
+import { EntityManager } from 'typeorm';
 
 const cancelReservationSchema = z.object({
   reservationId: z.string().uuid(),
 });
+
+async function releaseReservationItem(
+  em: EntityManager,
+  shopId: string,
+  reservationId: string,
+  item: SaleItemEntity,
+) {
+  const stock = await em.getRepository(StockItemEntity).findOne({
+    where: { shopId, flavorId: item.flavorId },
+    lock: { mode: 'pessimistic_write' },
+  });
+  if (!stock) return;
+
+  const beforePost = stock.postQuantity ?? 0;
+  const beforeReserved = stock.reservedQuantity ?? 0;
+  stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
+  stock.postQuantity = beforePost + item.quantity;
+  await em.getRepository(StockItemEntity).save(stock);
+
+  await logStockMovement(em, {
+    shopId,
+    productId: item.flavorId,
+    productName: `${item.productNameSnapshot} ${item.flavorNameSnapshot}`.trim(),
+    actionType: 'cancel_sale',
+    fromZone: 'warehouse',
+    toZone: 'post',
+    quantity: item.quantity,
+    postStockBefore: beforePost,
+    postStockAfter: stock.postQuantity,
+    warehouseBefore: stock.quantity,
+    warehouseAfter: stock.quantity,
+    contextType: 'reservation',
+    contextId: reservationId,
+    comment: `Возврат резерва #${reservationId.slice(0, 8)}: ${beforeReserved} -> ${stock.reservedQuantity ?? 0}`,
+  });
+}
 
 export async function GET() {
   const session = await getSession();
@@ -44,13 +82,7 @@ export async function GET() {
     for (const r of expired) {
       const reservationItems = itemsByReservationId.get(r.id) ?? [];
       for (const item of reservationItems) {
-        const stock = await em.getRepository(StockItemEntity).findOne({
-          where: { shopId: session.shopId, flavorId: item.flavorId },
-        });
-        if (stock) {
-          stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
-          await em.getRepository(StockItemEntity).save(stock);
-        }
+        await releaseReservationItem(em, session.shopId, r.id, item);
       }
       r.status = 'deleted';
       await em.getRepository(SaleEntity).save(r);
@@ -133,14 +165,7 @@ export async function DELETE(request: NextRequest) {
 
     // Возвращаем товары в прайс-лист (только уменьшаем reservedQuantity, quantity на складе не меняется)
     for (const item of items) {
-      const stock = await em.getRepository(StockItemEntity).findOne({
-        where: { shopId: session.shopId, flavorId: item.flavorId },
-      });
-
-      if (stock) {
-        stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
-        await em.getRepository(StockItemEntity).save(stock);
-      }
+      await releaseReservationItem(em, session.shopId, reservation.id, item);
     }
 
     // Помечаем резерв как удаленный
@@ -196,14 +221,7 @@ export async function POST(request: NextRequest) {
       const reservationItems = itemsByReservationId.get(reservation.id) ?? [];
 
       for (const item of reservationItems) {
-        const stock = await em.getRepository(StockItemEntity).findOne({
-          where: { shopId: session.shopId, flavorId: item.flavorId },
-        });
-
-        if (stock) {
-          stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
-          await em.getRepository(StockItemEntity).save(stock);
-        }
+        await releaseReservationItem(em, session.shopId, reservation.id, item);
       }
 
       // Помечаем резерв как удаленный

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback, useReducer } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { Search, Plus, Minus, ChevronRight, ChevronDown, PackagePlus, ScanLine, Edit2, Filter, ShoppingCart, Folder, Tag } from 'lucide-react';
+import { Search, Plus, Minus, ChevronDown, PackagePlus, ScanLine, Edit2, Filter, Folder, Tag } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
@@ -53,6 +53,9 @@ export function Inventory() {
   const [showBrandsManager, setShowBrandsManager] = useState(false);
   const [autoOpenCategoryCreate, setAutoOpenCategoryCreate] = useState(false);
   const [showMovements, setShowMovements] = useState(false);
+  const pendingFlavorRef = useRef<Set<string>>(new Set());
+  const [, bumpPendingUi] = useReducer((x: number) => x + 1, 0);
+  const [reservePickList, setReservePickList] = useState<any[] | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -61,7 +64,7 @@ export function Inventory() {
     queryFn: () => api<{ currency: string }>('/api/shop'),
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['inventory', search, filters],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -87,8 +90,13 @@ export function Inventory() {
   });
 
   const updateStock = useMutation({
-    mutationFn: (payload: { flavorId: string; quantity: number; postQuantity?: number; actionType?: string; comment?: string }) =>
-      api('/api/inventory/stock', { method: 'PATCH', body: payload }),
+    mutationFn: (payload: {
+      flavorId: string;
+      quantity: number;
+      postQuantity?: number;
+      actionType?: string;
+      comment?: string;
+    }) => api('/api/inventory/stock', { method: 'PATCH', body: payload }),
     onSuccess: (_, variables) => {
       // Инвалидируем все запросы инвентаря (с фильтрами и без)
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -126,17 +134,63 @@ export function Inventory() {
     });
   };
 
-  const updateQuantity = (flavorId: string, delta: number) => {
-    const item = data?.items.find((t) => t.flavor.id === flavorId);
-    if (!item) return;
-    const newQty = Math.max(0, item.quantity + delta);
-    updateStock.mutate({
-      flavorId,
-      quantity: newQty,
-      actionType: delta > 0 ? 'receipt_to_warehouse' : 'manual_decrease',
-      comment: delta > 0 ? 'Ручное пополнение остатка' : 'Ручное уменьшение остатка',
+  const updateQuantity = useCallback(
+    async (flavorId: string, delta: number) => {
+      if (pendingFlavorRef.current.has(flavorId)) return;
+      const item = data?.items.find((t) => t.flavor.id === flavorId);
+      if (!item) return;
+      const newQty = Math.max(0, item.quantity + delta);
+      pendingFlavorRef.current.add(flavorId);
+      bumpPendingUi();
+      try {
+        await updateStock.mutateAsync({
+          flavorId,
+          quantity: newQty,
+          actionType: delta > 0 ? 'receipt_to_warehouse' : 'manual_decrease',
+          comment: delta > 0 ? 'Ручное пополнение остатка' : 'Ручное уменьшение остатка',
+        });
+      } finally {
+        pendingFlavorRef.current.delete(flavorId);
+        bumpPendingUi();
+      }
+    },
+    [data?.items, updateStock]
+  );
+
+  const openSellReservation = useCallback((reservation: any) => {
+    setSellingReservation({
+      id: reservation.id,
+      data: {
+        reservationCustomerName: reservation.reservationCustomerName,
+        reservationExpiry: reservation.reservationExpiry,
+        finalAmount: reservation.finalAmount,
+      },
     });
-  };
+  }, []);
+
+  const handleReserveSellClick = useCallback(
+    async (flavorId: string) => {
+      try {
+        const res = await api<any[]>(`/api/reservations/by-flavor/${flavorId}`);
+        if (!res?.length) return;
+        if (res.length === 1) {
+          openSellReservation(res[0]);
+          return;
+        }
+        const sorted = [...res].sort(
+          (a, b) =>
+            new Date(a.reservationExpiry ?? 0).getTime() - new Date(b.reservationExpiry ?? 0).getTime()
+        );
+        setReservePickList(sorted);
+      } catch {
+        toast({
+          title: 'Не удалось загрузить резервы',
+          variant: 'destructive',
+        });
+      }
+    },
+    [openSellReservation, toast]
+  );
 
   const items = Array.isArray(data?.items) ? data.items : [];
   const flavors = Array.isArray(data?.flavors) ? data.flavors : [];
@@ -203,11 +257,27 @@ export function Inventory() {
 
   const totalItems = items.reduce((s, t) => s + t.quantity, 0);
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <>
         <ScreenHeader title="Склад" subtitle="Загрузка..." />
         <div className="px-4 py-8 text-center text-muted-foreground">Загрузка...</div>
+      </>
+    );
+  }
+
+  if (isError && !data) {
+    return (
+      <>
+        <ScreenHeader title="Склад" subtitle="Ошибка загрузки" />
+        <div className="px-5 py-8 space-y-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            {error instanceof Error ? error.message : 'Не удалось загрузить склад'}
+          </p>
+          <Button type="button" onClick={() => refetch()} className="rounded-[12px]">
+            Повторить
+          </Button>
+        </div>
       </>
     );
   }
@@ -229,6 +299,16 @@ export function Inventory() {
       <ScreenHeader title="Склад" subtitle={`${totalItems} единиц на складе`} />
 
       <div className="px-5 space-y-4">
+        {isError && data && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl border border-destructive/30 bg-destructive/5 text-sm">
+            <span className="text-muted-foreground flex-1">
+              Не удалось обновить данные склада. Показано последнее сохранённое состояние.
+            </span>
+            <Button type="button" variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+              Повторить
+            </Button>
+          </div>
+        )}
         {items.length === 0 && !search && !hasActiveFilters && (
           <div className="p-4 border border-dashed border-primary/30 rounded-xl bg-primary/5 text-center space-y-2">
             <p className="text-sm font-medium">Ваш склад пуст</p>
@@ -252,8 +332,10 @@ export function Inventory() {
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button
+              type="button"
               onClick={() => { setScanMode('search'); setShowScan(true); }}
               className="p-2 hover:bg-muted rounded-[10px] transition-colors"
+              aria-label="Сканер штрихкода"
               title="Сканер"
             >
               <ScanLine size={20} className="text-primary" strokeWidth={1.5} />
@@ -303,16 +385,20 @@ export function Inventory() {
         <section>
           <div className="grid grid-cols-2 gap-3">
             <Button
+              type="button"
               onClick={() => setShowReceive(true)}
               className="h-12 rounded-[18px] font-semibold"
+              aria-label="Приём товара на склад"
             >
-              <PackagePlus size={20} strokeWidth={1.5} className="mr-2" />
+              <PackagePlus size={20} strokeWidth={1.5} className="mr-2" aria-hidden />
               Приём товара
             </Button>
             <Button
+              type="button"
               variant="outline"
               onClick={() => setShowMovements(true)}
               className="h-12 rounded-[18px] font-semibold"
+              aria-label="Открыть историю движений остатков"
             >
               История движений
             </Button>
@@ -367,8 +453,11 @@ export function Inventory() {
                     <div key={format.id} className="bg-card rounded-[20px] overflow-hidden border border-border">
                       <div className="flex items-center gap-3 px-5 py-4">
                         <button
+                          type="button"
                           onClick={() => toggleFormat(format.id)}
                           className="flex-1 flex items-center gap-3 text-left"
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? 'Свернуть' : 'Развернуть'} линейку ${format.name ?? ''}`}
                         >
                           <span className="text-xl">{brand?.emojiPrefix}</span>
                           <div className="flex-1">
@@ -402,11 +491,13 @@ export function Inventory() {
                         </button>
                         {brand && (
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditBrandFormat({ brand, format });
                             }}
                             className="p-2 hover:bg-muted rounded-[10px] transition-colors flex-shrink-0"
+                            aria-label={`Редактировать линейку ${format.name ?? ''}`}
                             title="Редактировать бренд (линейку)"
                           >
                             <Edit2 size={18} className="text-muted-foreground" strokeWidth={1.5} />
@@ -439,12 +530,14 @@ export function Inventory() {
                                         <h4 className="text-foreground text-sm font-medium">{t.flavor.name}</h4>
                                         {!t.barcode && (
                                           <span className="px-2 py-0.5 bg-destructive/20 text-destructive text-xs rounded-full">
-                                            No Barcode
+                                            Без штрихкода
                                           </span>
                                         )}
                                       </div>
                                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                        <span>Себест: {t.costPrice}{getCurrencySymbol(shopData?.currency)}</span>
+                                        <span>
+                                          Себестоимость: {t.costPrice} {getCurrencySymbol(shopData?.currency)}
+                                        </span>
                                         <span>•</span>
                                         <span>Цена: {t.format?.unitPrice ?? format.unitPrice}{getCurrencySymbol(shopData?.currency)}</span>
                                       </div>
@@ -452,20 +545,8 @@ export function Inventory() {
                                         <div className="flex items-center gap-2 mt-2">
                                           <span className="text-xs text-muted-foreground">Резерв: {t.reservedQuantity} шт</span>
                                           <button
-                                            onClick={async () => {
-                                              const res = await api<any[]>(`/api/reservations/by-flavor/${t.flavor.id}`);
-                                              if (res && res.length > 0) {
-                                                const reservation = res[0];
-                                                setSellingReservation({
-                                                  id: reservation.id,
-                                                  data: {
-                                                    reservationCustomerName: reservation.reservationCustomerName,
-                                                    reservationExpiry: reservation.reservationExpiry,
-                                                    finalAmount: reservation.finalAmount,
-                                                  },
-                                                });
-                                              }
-                                            }}
+                                            type="button"
+                                            onClick={() => handleReserveSellClick(t.flavor.id)}
                                             className="px-2 py-1 bg-primary/20 text-primary text-xs rounded-[8px] hover:bg-primary/30 transition-colors"
                                           >
                                             Продать
@@ -475,15 +556,19 @@ export function Inventory() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <button
+                                        type="button"
                                         onClick={() => setEditItem(t)}
                                         className="p-2 bg-card rounded-[10px] hover:bg-muted transition-colors"
+                                        aria-label={`Редактировать товар ${t.flavor.name}`}
                                       >
                                         <Edit2 size={14} className="text-muted-foreground" strokeWidth={1.5} />
                                       </button>
                                       <button
+                                        type="button"
                                         onClick={() => updateQuantity(t.flavor.id, -1)}
                                         className="p-2 bg-card rounded-[10px] active:scale-95 transition-transform disabled:opacity-30"
-                                        disabled={t.quantity === 0}
+                                        disabled={t.quantity === 0 || pendingFlavorRef.current.has(t.flavor.id)}
+                                        aria-label={`Уменьшить остаток: ${t.flavor.name}`}
                                       >
                                         <Minus size={14} className="text-destructive" strokeWidth={2} />
                                       </button>
@@ -499,8 +584,11 @@ export function Inventory() {
                                         {t.quantity}
                                       </span>
                                       <button
+                                        type="button"
                                         onClick={() => updateQuantity(t.flavor.id, 1)}
                                         className="p-2 bg-card rounded-[10px] active:scale-95 transition-transform"
+                                        disabled={pendingFlavorRef.current.has(t.flavor.id)}
+                                        aria-label={`Увеличить остаток: ${t.flavor.name}`}
                                       >
                                         <Plus size={14} className="text-primary" strokeWidth={2} />
                                       </button>
@@ -576,6 +664,42 @@ export function Inventory() {
           reservationData={sellingReservation.data}
         />
       )}
+
+      <Dialog open={!!reservePickList?.length} onOpenChange={(o) => !o && setReservePickList(null)}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Выберите резерв</DialogTitle>
+            <DialogDescription>
+              На этот вкус несколько активных резервов. Укажите, какой провести в продажу.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 overflow-y-auto flex-1 min-h-0 py-1">
+            {reservePickList?.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className="w-full text-left p-3 rounded-xl border border-border hover:bg-muted/80 space-y-1 transition-colors"
+                onClick={() => {
+                  const picked = r;
+                  setReservePickList(null);
+                  openSellReservation(picked);
+                }}
+              >
+                <div className="text-sm font-medium">{r.reservationCustomerName?.trim() || 'Без имени клиента'}</div>
+                <div className="text-xs text-muted-foreground">
+                  Срок: {r.reservationExpiry ? new Date(r.reservationExpiry).toLocaleString() : '—'} · Сумма:{' '}
+                  {r.finalAmount != null ? `${r.finalAmount} ${getCurrencySymbol(shopData?.currency)}` : '—'}
+                </div>
+              </button>
+            ))}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setReservePickList(null)}>
+              Отмена
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Categories Manager Modal */}
       <Dialog open={showCategoriesManager} onOpenChange={setShowCategoriesManager}>
