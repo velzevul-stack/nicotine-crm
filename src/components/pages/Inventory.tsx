@@ -52,6 +52,7 @@ export function Inventory() {
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
   const [showBrandsManager, setShowBrandsManager] = useState(false);
   const [autoOpenCategoryCreate, setAutoOpenCategoryCreate] = useState(false);
+  const [showMovements, setShowMovements] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -132,8 +133,8 @@ export function Inventory() {
     updateStock.mutate({
       flavorId,
       quantity: newQty,
-      actionType: delta > 0 ? 'manual_transfer' : 'manual_decrease',
-      comment: delta > 0 ? 'Ручное увеличение остатка' : 'Ручное уменьшение остатка',
+      actionType: delta > 0 ? 'receipt_to_warehouse' : 'manual_decrease',
+      comment: delta > 0 ? 'Ручное пополнение остатка' : 'Ручное уменьшение остатка',
     });
   };
 
@@ -300,16 +301,23 @@ export function Inventory() {
 
         {/* Приём товара - primary full-width button */}
         <section>
-          <Button
-            onClick={() => setShowReceive(true)}
-            className="w-full h-12 rounded-[18px] font-semibold"
-          >
-            <PackagePlus size={20} strokeWidth={1.5} className="mr-2" />
-            Приём товара
-          </Button>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              onClick={() => setShowReceive(true)}
+              className="h-12 rounded-[18px] font-semibold"
+            >
+              <PackagePlus size={20} strokeWidth={1.5} className="mr-2" />
+              Приём товара
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowMovements(true)}
+              className="h-12 rounded-[18px] font-semibold"
+            >
+              История движений
+            </Button>
+          </div>
         </section>
-
-        <StockMovementsPanel items={items} />
 
         <section className="space-y-6 pb-20">
           {isLoading ? (
@@ -592,6 +600,20 @@ export function Inventory() {
             </DialogDescription>
           </DialogHeader>
           <BrandsManager />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showMovements} onOpenChange={setShowMovements}>
+        <DialogContent className="max-w-[96vw] sm:max-w-6xl max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle>История движений</DialogTitle>
+            <DialogDescription>
+              Журнал всех изменений остатков по товарам
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-4 pb-4 overflow-auto">
+            <StockMovementsPanel items={items} />
+          </div>
         </DialogContent>
       </Dialog>
     </>

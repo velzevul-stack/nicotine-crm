@@ -11,6 +11,7 @@ import {
   ProductFormatEntity,
   BrandEntity,
   CategoryEntity,
+  StockMovementEntity,
 } from '@/lib/db/entities';
 import { logStockMovement } from '@/lib/stock-movement-log';
 
@@ -126,6 +127,14 @@ export async function POST() {
         .createQueryBuilder()
         .delete()
         .from(CategoryEntity)
+        .where('shopId = :shopId', { shopId })
+        .execute();
+
+      // 10. Удаляем историю движений
+      await em
+        .createQueryBuilder()
+        .delete()
+        .from(StockMovementEntity)
         .where('shopId = :shopId', { shopId })
         .execute();
 

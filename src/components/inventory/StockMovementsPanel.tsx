@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -36,6 +35,11 @@ type Movement = {
   contextType: 'sale' | 'debt' | 'reservation' | null;
   contextId: string | null;
   comment: string | null;
+};
+
+type MovementsResponse = {
+  rows: Movement[];
+  products: Array<{ productId: string; productName: string }>;
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -72,7 +76,7 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
   const [toDate, setToDate] = useState<string>('');
   const [limit, setLimit] = useState<number>(100);
 
-  const productOptions = useMemo(() => {
+  const fallbackProductOptions = useMemo(() => {
     const uniq = new Map<string, string>();
     for (const item of items) {
       if (!item.flavor?.id || uniq.has(item.flavor.id)) continue;
@@ -82,7 +86,7 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
     return Array.from(uniq.entries()).map(([id, name]) => ({ id, name }));
   }, [items]);
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['inventory-movements', productId, actionType, fromDate, toDate, limit],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -91,19 +95,23 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
       if (actionType !== 'all') params.set('actionType', actionType);
       if (fromDate) params.set('from', fromDate);
       if (toDate) params.set('to', toDate);
-      return api<Movement[]>(`/api/inventory/movements?${params.toString()}`);
+      return api<MovementsResponse>(`/api/inventory/movements?${params.toString()}`);
     },
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
+    staleTime: 2000,
   });
 
-  const movements = Array.isArray(data) ? data : [];
+  const movements = Array.isArray(data?.rows) ? data.rows : [];
+  const productOptions = (Array.isArray(data?.products) && data.products.length > 0)
+    ? data.products.map((p) => ({ id: p.productId, name: p.productName }))
+    : fallbackProductOptions;
 
   return (
     <section className="bg-card rounded-[20px] border border-border p-4 space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">История движений</h3>
-        <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
-          Обновить
-        </Button>
+        <span className="text-xs text-muted-foreground">{isFetching ? 'Обновление...' : 'Автообновление: 5с'}</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
@@ -162,32 +170,32 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
       ) : movements.length === 0 ? (
         <div className="text-sm text-muted-foreground py-6 text-center">Записей нет</div>
       ) : (
-        <Table>
+        <Table className="table-fixed min-w-[1280px]">
           <TableHeader>
             <TableRow>
-              <TableHead>Когда</TableHead>
-              <TableHead>Товар</TableHead>
-              <TableHead>Операция</TableHead>
-              <TableHead>Зоны</TableHead>
-              <TableHead>Кол-во</TableHead>
-              <TableHead>Post до/после</TableHead>
-              <TableHead>Склад до/после</TableHead>
-              <TableHead>Контекст</TableHead>
-              <TableHead>Комментарий</TableHead>
+              <TableHead className="w-[170px]">Когда</TableHead>
+              <TableHead className="w-[250px]">Товар</TableHead>
+              <TableHead className="w-[160px]">Операция</TableHead>
+              <TableHead className="w-[130px]">Зоны</TableHead>
+              <TableHead className="w-[80px]">Кол-во</TableHead>
+              <TableHead className="w-[120px]">Post до/после</TableHead>
+              <TableHead className="w-[130px]">Склад до/после</TableHead>
+              <TableHead className="w-[150px]">Контекст</TableHead>
+              <TableHead className="w-[260px]">Комментарий</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {movements.map((m) => (
               <TableRow key={m.id}>
-                <TableCell>{new Date(m.createdAt).toLocaleString()}</TableCell>
-                <TableCell className="max-w-[220px] truncate" title={m.productName}>{m.productName}</TableCell>
-                <TableCell>{ACTION_LABELS[m.actionType] || m.actionType}</TableCell>
-                <TableCell>{zoneLabel(m.fromZone)} {'->'} {zoneLabel(m.toZone)}</TableCell>
-                <TableCell>{m.quantity}</TableCell>
-                <TableCell>{m.postStockBefore} {'->'} {m.postStockAfter}</TableCell>
-                <TableCell>{m.warehouseBefore} {'->'} {m.warehouseAfter}</TableCell>
-                <TableCell>{contextLabel(m.contextType, m.contextId)}</TableCell>
-                <TableCell className="max-w-[240px] truncate" title={m.comment || ''}>{m.comment || '-'}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{new Date(m.createdAt).toLocaleString()}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{m.productName}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{ACTION_LABELS[m.actionType] || m.actionType}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{zoneLabel(m.fromZone)} {'->'} {zoneLabel(m.toZone)}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{m.quantity}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{m.postStockBefore} {'->'} {m.postStockAfter}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{m.warehouseBefore} {'->'} {m.warehouseAfter}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{contextLabel(m.contextType, m.contextId)}</TableCell>
+                <TableCell className="whitespace-normal break-all align-top">{m.comment || '-'}</TableCell>
               </TableRow>
             ))}
           </TableBody>

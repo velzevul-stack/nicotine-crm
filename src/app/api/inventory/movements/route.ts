@@ -7,7 +7,8 @@ export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
-  const limit = Math.min(Number(request.nextUrl.searchParams.get('limit') || 100), 500);
+  const rawLimit = Number(request.nextUrl.searchParams.get('limit') || 100);
+  const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 500)) : 100;
   const productId = request.nextUrl.searchParams.get('productId');
   const actionType = request.nextUrl.searchParams.get('actionType');
   const from = request.nextUrl.searchParams.get('from');
@@ -23,13 +24,23 @@ export async function GET(request: NextRequest) {
 
   if (productId) qb.andWhere('m.productId = :productId', { productId });
   if (actionType) qb.andWhere('m.actionType = :actionType', { actionType });
-  if (from) qb.andWhere('m.createdAt >= :from', { from: new Date(from).toISOString() });
+  if (from) {
+    const fromDate = new Date(from);
+    if (!Number.isNaN(fromDate.getTime())) {
+      qb.andWhere('m.createdAt >= :from', { from: fromDate.toISOString() });
+    }
+  }
   if (to) {
     const toDate = new Date(to);
-    toDate.setHours(23, 59, 59, 999);
-    qb.andWhere('m.createdAt <= :to', { to: toDate.toISOString() });
+    if (!Number.isNaN(toDate.getTime())) {
+      toDate.setHours(23, 59, 59, 999);
+      qb.andWhere('m.createdAt <= :to', { to: toDate.toISOString() });
+    }
   }
 
   const rows = await qb.getMany();
-  return NextResponse.json(rows);
+  const products = Array.from(
+    new Map(rows.map((r) => [r.productId, { productId: r.productId, productName: r.productName }])).values()
+  );
+  return NextResponse.json({ rows, products });
 }
