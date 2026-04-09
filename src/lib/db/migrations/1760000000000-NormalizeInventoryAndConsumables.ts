@@ -89,6 +89,56 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
       WHERE s."flavorId" = d.old_id
     `);
 
+    // После remap flavorId в stock_items снова могут появиться дубли по (shopId, flavorId).
+    // Схлопываем их повторно перед созданием уникального индекса.
+    await queryRunner.query(`
+      WITH grouped AS (
+        SELECT DISTINCT ON ("shopId", "flavorId")
+          "id" AS keep_id,
+          "shopId",
+          "flavorId"
+        FROM "stock_items"
+        ORDER BY "shopId", "flavorId", "createdAt" ASC, "id" ASC
+      ),
+      totals AS (
+        SELECT
+          g.keep_id,
+          s."shopId",
+          s."flavorId",
+          SUM(coalesce(s."quantity", 0)) AS total_quantity,
+          SUM(coalesce(s."reservedQuantity", 0)) AS total_reserved,
+          MAX(coalesce(s."costPrice", 0)) AS merged_cost
+        FROM "stock_items" s
+        JOIN grouped g
+          ON s."shopId" = g."shopId"
+         AND s."flavorId" = g."flavorId"
+        GROUP BY g.keep_id, s."shopId", s."flavorId"
+      )
+      UPDATE "stock_items" s
+      SET
+        "quantity" = t.total_quantity,
+        "reservedQuantity" = t.total_reserved,
+        "costPrice" = t.merged_cost
+      FROM totals t
+      WHERE s."id" = t.keep_id
+    `);
+
+    await queryRunner.query(`
+      WITH grouped AS (
+        SELECT DISTINCT ON ("shopId", "flavorId")
+          "id" AS keep_id,
+          "shopId",
+          "flavorId"
+        FROM "stock_items"
+        ORDER BY "shopId", "flavorId", "createdAt" ASC, "id" ASC
+      )
+      DELETE FROM "stock_items" s
+      USING grouped g
+      WHERE s."shopId" = g."shopId"
+        AND s."flavorId" = g."flavorId"
+        AND s."id" <> g.keep_id
+    `);
+
     await queryRunner.query(`
       WITH flavor_groups AS (
         SELECT DISTINCT ON ("shopId", "productFormatId", "normalizedName")
