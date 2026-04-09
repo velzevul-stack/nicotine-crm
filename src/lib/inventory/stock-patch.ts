@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   FlavorEntity,
   StockItemEntity,
+  type StockItem,
   StockMovementActionType,
   StockMovementContextType,
   StockZone,
@@ -90,7 +91,7 @@ export async function applyStockPatchInTransaction(
   em: EntityManager,
   shopId: string,
   parsed: StockUpdatePayload
-): Promise<StockItemEntity> {
+): Promise<StockItem> {
   const flavor = await em.getRepository(FlavorEntity).findOne({
     where: { id: parsed.flavorId, shopId },
   });

@@ -61,7 +61,7 @@ export function Profile() {
   }, []);
 
   useEffect(() => {
-    const raw = searchParams.get('section');
+    const raw = searchParams?.get('section') ?? null;
     if (isSection(raw)) {
       setActiveSection(raw);
     }

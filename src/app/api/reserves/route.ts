@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
-import { SaleEntity, SaleItemEntity, StockItemEntity } from '@/lib/db/entities';
+import { SaleEntity, SaleItemEntity, StockItemEntity, type SaleItem } from '@/lib/db/entities';
 import { In } from 'typeorm';
 import { z } from 'zod';
 import { logStockMovement } from '@/lib/stock-movement-log';
@@ -15,7 +15,7 @@ async function releaseReservationItem(
   em: EntityManager,
   shopId: string,
   reservationId: string,
-  item: SaleItemEntity,
+  item: SaleItem,
 ) {
   const stock = await em.getRepository(StockItemEntity).findOne({
     where: { shopId, flavorId: item.flavorId },

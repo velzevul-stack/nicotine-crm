@@ -5,6 +5,7 @@ import {
   SaleEntity,
   SaleItemEntity,
   StockItemEntity,
+  type StockItem,
   FlavorEntity,
   ProductFormatEntity,
   DebtEntity,
@@ -62,11 +63,11 @@ const createSchema = z.object({
   items: z.array(itemSchema).min(1),
 });
 
-function getWarehouseAvailable(stock: StockItemEntity | null): number {
+function getWarehouseAvailable(stock: StockItem | null): number {
   return Math.max(0, (stock?.quantity ?? 0) - (stock?.reservedQuantity ?? 0));
 }
 
-function getPostAvailable(stock: StockItemEntity | null): number {
+function getPostAvailable(stock: StockItem | null): number {
   return Math.max(0, stock?.postQuantity ?? 0);
 }
 
