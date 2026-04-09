@@ -17,30 +17,44 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
 
     await queryRunner.query(`
       WITH grouped AS (
-        SELECT
-          MIN("id") AS keep_id,
+        SELECT DISTINCT ON ("shopId", "flavorId")
+          "id" AS keep_id,
           "shopId",
-          "flavorId",
+          "flavorId"
+        FROM "stock_items"
+        ORDER BY "shopId", "flavorId", "createdAt" ASC, "id" ASC
+      ),
+      totals AS (
+        SELECT
+          g.keep_id,
+          s."shopId",
+          s."flavorId",
           SUM(coalesce("quantity", 0)) AS total_quantity,
           SUM(coalesce("reservedQuantity", 0)) AS total_reserved,
           MAX(coalesce("costPrice", 0)) AS merged_cost
-        FROM "stock_items"
-        GROUP BY "shopId", "flavorId"
+        FROM "stock_items" s
+        JOIN grouped g
+          ON s."shopId" = g."shopId"
+         AND s."flavorId" = g."flavorId"
+        GROUP BY g.keep_id, s."shopId", s."flavorId"
       )
       UPDATE "stock_items" s
       SET
-        "quantity" = g.total_quantity,
-        "reservedQuantity" = g.total_reserved,
-        "costPrice" = g.merged_cost
-      FROM grouped g
-      WHERE s."id" = g.keep_id
+        "quantity" = t.total_quantity,
+        "reservedQuantity" = t.total_reserved,
+        "costPrice" = t.merged_cost
+      FROM totals t
+      WHERE s."id" = t.keep_id
     `);
 
     await queryRunner.query(`
       WITH grouped AS (
-        SELECT MIN("id") AS keep_id, "shopId", "flavorId"
+        SELECT DISTINCT ON ("shopId", "flavorId")
+          "id" AS keep_id,
+          "shopId",
+          "flavorId"
         FROM "stock_items"
-        GROUP BY "shopId", "flavorId"
+        ORDER BY "shopId", "flavorId", "createdAt" ASC, "id" ASC
       )
       DELETE FROM "stock_items" s
       USING grouped g
@@ -51,14 +65,14 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
 
     await queryRunner.query(`
       WITH flavor_groups AS (
-        SELECT
-          MIN("id") AS keep_id,
+        SELECT DISTINCT ON ("shopId", "productFormatId", "normalizedName")
+          "id" AS keep_id,
           "shopId",
           "productFormatId",
           "normalizedName"
         FROM "flavors"
         WHERE "normalizedName" IS NOT NULL
-        GROUP BY "shopId", "productFormatId", "normalizedName"
+        ORDER BY "shopId", "productFormatId", "normalizedName", "createdAt" ASC, "id" ASC
       ),
       dup AS (
         SELECT f."id" AS old_id, fg.keep_id
@@ -77,14 +91,14 @@ export class NormalizeInventoryAndConsumables1760000000000 implements MigrationI
 
     await queryRunner.query(`
       WITH flavor_groups AS (
-        SELECT
-          MIN("id") AS keep_id,
+        SELECT DISTINCT ON ("shopId", "productFormatId", "normalizedName")
+          "id" AS keep_id,
           "shopId",
           "productFormatId",
           "normalizedName"
         FROM "flavors"
         WHERE "normalizedName" IS NOT NULL
-        GROUP BY "shopId", "productFormatId", "normalizedName"
+        ORDER BY "shopId", "productFormatId", "normalizedName", "createdAt" ASC, "id" ASC
       ),
       dup AS (
         SELECT f."id" AS old_id, fg.keep_id
