@@ -303,7 +303,15 @@ export function Reports() {
 
   const openEdit = (sale: any) => {
     setEditingSale(sale);
-    setEditItems(sale.items.map((i: any) => ({ ...i })));
+    setEditItems(
+      sale.items.map((i: any) => {
+        const qty = Math.max(1, Math.floor(Number(i.quantity)) || 1);
+        const price = Number(i.unitPrice) || 0;
+        const lt = Number(i.lineTotal);
+        const lineTotal = Number.isFinite(lt) ? lt : qty * price;
+        return { ...i, quantity: qty, unitPrice: price, lineTotal };
+      })
+    );
     const pt = sale.paymentType === 'split' || sale.paymentType === 'cash' || sale.paymentType === 'card' || sale.paymentType === 'debt' ? sale.paymentType : 'cash';
     setEditPayment(pt);
     setEditSplitCash(pt === 'split' && sale.cashAmount != null ? String(sale.cashAmount) : '');
@@ -321,15 +329,12 @@ export function Reports() {
 
   const updateEditItemQty = (itemId: string, delta: number) => {
     setEditItems((prev) =>
-      prev.map((i) =>
-        i.id === itemId
-          ? {
-              ...i,
-              quantity: Math.max(1, i.quantity + delta),
-              lineTotal: Math.max(1, i.quantity + delta) * i.unitPrice,
-            }
-          : i
-      )
+      prev.map((i) => {
+        if (i.id !== itemId) return i;
+        const q = Math.max(1, Math.floor(Number(i.quantity) || 0) + delta);
+        const price = Number(i.unitPrice) || 0;
+        return { ...i, quantity: q, lineTotal: q * price };
+      })
     );
   };
 
@@ -394,14 +399,19 @@ export function Reports() {
     const editTotal = Math.max(0, editSubtotal - editDiscountAmount + editDeliveryAmount);
 
     const payload: any = {
-      items: editItems.map((i) => ({
-        flavorId: i.flavorId,
-        productNameSnapshot: i.productNameSnapshot,
-        flavorNameSnapshot: i.flavorNameSnapshot,
-        unitPrice: i.unitPrice,
-        quantity: i.quantity,
-        lineTotal: i.lineTotal,
-      })),
+      items: editItems.map((i) => {
+        const qty = Math.max(1, Math.floor(Number(i.quantity)) || 1);
+        const price = Number(i.unitPrice) || 0;
+        const line = Number.isFinite(Number(i.lineTotal)) ? Number(i.lineTotal) : qty * price;
+        return {
+          flavorId: i.flavorId,
+          productNameSnapshot: i.productNameSnapshot,
+          flavorNameSnapshot: i.flavorNameSnapshot,
+          unitPrice: price,
+          quantity: qty,
+          lineTotal: line,
+        };
+      }),
       paymentType: editPayment,
       discountValue: editDiscountAmount,
       discountType: 'absolute',

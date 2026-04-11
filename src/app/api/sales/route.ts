@@ -185,22 +185,16 @@ export async function POST(request: NextRequest) {
       const warehouseAvailable = getWarehouseAvailable(stock);
       const postAvailable = getPostAvailable(stock);
       const isConsumable = consumableFlavorIds.has(it.flavorId);
-      const availableForSale = isConsumable
-        ? warehouseAvailable
-        : Math.min(warehouseAvailable, postAvailable);
+      const sellableNonCon =
+        postAvailable <= 0 ? warehouseAvailable : Math.min(warehouseAvailable, postAvailable);
+      const availableForSale = isConsumable ? warehouseAvailable : sellableNonCon;
 
-      if (isReservation) {
-        if (warehouseAvailable < it.quantity || (!isConsumable && postAvailable < it.quantity)) {
-          throw new Error(
-            `Недостаточно товара для резерва: ${it.flavorNameSnapshot} (доступно ${availableForSale})`
-          );
-        }
-      } else {
-        if (warehouseAvailable < it.quantity || (!isConsumable && postAvailable < it.quantity)) {
-          throw new Error(
-            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${availableForSale})`
-          );
-        }
+      if (availableForSale < it.quantity) {
+        throw new Error(
+          isReservation
+            ? `Недостаточно товара для резерва: ${it.flavorNameSnapshot} (доступно ${availableForSale})`
+            : `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${availableForSale})`
+        );
       }
     }
 
@@ -283,7 +277,10 @@ export async function POST(request: NextRequest) {
         const beforeQty = stock.quantity;
         const beforePostQty = stock.postQuantity ?? 0;
         stock.quantity -= it.quantity;
-        stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
+        const isConsumable = consumableFlavorIds.has(it.flavorId);
+        if (!isConsumable) {
+          stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
+        }
         await logStockMovement(em, {
           shopId: session.shopId,
           productId: it.flavorId,

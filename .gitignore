@@ -16,6 +16,8 @@ node_modules
 dist
 dist-ssr
 .next/
+# Генерируется Next.js локально — из‑за него срываются merge/pull при разных версиях
+next-env.d.ts
 *.tsbuildinfo
 tsconfig.tsbuildinfo
 *.local

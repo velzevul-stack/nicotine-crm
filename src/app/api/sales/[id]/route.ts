@@ -135,9 +135,7 @@ export async function PATCH(
             const beforePostQty = stock.postQuantity ?? 0;
             const beforeReserved = stock.reservedQuantity ?? 0;
             stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - oldItem.quantity);
-            if (!consumableFlavorIds.has(oldItem.flavorId)) {
-              stock.postQuantity = beforePostQty + oldItem.quantity;
-            }
+            stock.postQuantity = beforePostQty + oldItem.quantity;
             await logStockMovement(em, {
               shopId: session.shopId,
               productId: oldItem.flavorId,
@@ -158,9 +156,8 @@ export async function PATCH(
             const beforeQty = stock.quantity;
             const beforePostQty = stock.postQuantity ?? 0;
             stock.quantity += oldItem.quantity;
-            if (!consumableFlavorIds.has(oldItem.flavorId)) {
-              stock.postQuantity = beforePostQty + oldItem.quantity;
-            }
+            // Всегда откатываем витрину так же, как при продаже списывали (в т.ч. расходники).
+            stock.postQuantity = beforePostQty + oldItem.quantity;
             await logStockMovement(em, {
               shopId: session.shopId,
               productId: oldItem.flavorId,
@@ -203,8 +200,14 @@ export async function PATCH(
         const warehouseAvailable = getWarehouseAvailable(stock);
         const postAvailable = getPostAvailable(stock);
         const isCon = consumableFlavorIds.has(it.flavorId);
-        const avail = isCon ? warehouseAvailable : Math.min(warehouseAvailable, postAvailable);
-        if (warehouseAvailable < it.quantity || (!isCon && postAvailable < it.quantity)) {
+        const sellableNonCon =
+          postAvailable <= 0 ? warehouseAvailable : Math.min(warehouseAvailable, postAvailable);
+        const avail = isCon ? warehouseAvailable : sellableNonCon;
+        if (isCon) {
+          if (warehouseAvailable < it.quantity) {
+            throw new Error(`Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${avail})`);
+          }
+        } else if (sellableNonCon < it.quantity) {
           throw new Error(`Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${avail})`);
         }
       }
@@ -275,7 +278,10 @@ export async function PATCH(
           const beforeQty = stock.quantity;
           const beforePostQty = stock.postQuantity ?? 0;
           stock.quantity -= it.quantity;
-          stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
+          const isConLine = consumableFlavorIds.has(it.flavorId);
+          if (!isConLine) {
+            stock.postQuantity = Math.max(0, beforePostQty - it.quantity);
+          }
           await logStockMovement(em, {
             shopId: session.shopId,
             productId: it.flavorId,

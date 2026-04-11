@@ -13,5 +13,10 @@ export function flavorAvailableQuantity(flavor: {
   if (flavor.isConsumableCategory) {
     return warehouseFree;
   }
+  // На витрине 0, но на складе есть свободный остаток — считаем доступным склад
+  // (после ручного изменения остатков post мог остаться 0, и товар пропадал из продажи).
+  if (p <= 0) {
+    return warehouseFree;
+  }
   return Math.max(0, Math.min(p, warehouseFree));
 }
