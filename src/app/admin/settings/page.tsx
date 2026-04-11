@@ -7,7 +7,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { PageHeader } from '@/components/PageHeader';
-import { Clock, Gift } from 'lucide-react';
+import { Clock, Gift, Bug } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+
+type AdminSystemSettings = {
+  trialDays: number;
+  referralRewardDays: number;
+  clientErrorLoggingEnabled: boolean;
+};
+
+type ClientErrorLogRow = {
+  id: string;
+  createdAt: string;
+  kind: string;
+  message: string;
+  href: string | null;
+  shopId: string | null;
+  userId: string | null;
+};
 
 export default function AdminSettingsPage() {
   const { toast } = useToast();
@@ -21,8 +39,14 @@ export default function AdminSettingsPage() {
 
   const { data: systemSettings } = useQuery({
     queryKey: ['admin-system-settings'],
+    queryFn: () => api<AdminSystemSettings>('/api/admin/settings'),
+  });
+
+  const { data: clientErrorLog, refetch: refetchClientErrors } = useQuery({
+    queryKey: ['admin-client-errors'],
     queryFn: () =>
-      api<{ trialDays: number; referralRewardDays: number }>('/api/admin/settings'),
+      api<{ rows: ClientErrorLogRow[]; total: number }>('/api/admin/client-errors?limit=30'),
+    enabled: !!systemSettings?.clientErrorLoggingEnabled,
   });
 
   const [telegramUsername, setTelegramUsername] = useState('');
@@ -65,9 +89,34 @@ export default function AdminSettingsPage() {
     },
   });
 
+  const toggleClientErrorLogging = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api<AdminSystemSettings>('/api/admin/settings', {
+        method: 'PATCH',
+        body: { clientErrorLoggingEnabled: enabled },
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['admin-system-settings'], data);
+      void queryClient.invalidateQueries({ queryKey: ['admin-client-errors'] });
+      toast({
+        title: data.clientErrorLoggingEnabled ? 'Логи ошибок на сервер включены' : 'Логи ошибок на сервер выключены',
+        description: data.clientErrorLoggingEnabled
+          ? 'Короткие сообщения об ошибках с сайта будут сохраняться в БД.'
+          : 'Новые записи не создаются.',
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: 'Не удалось сохранить',
+        description: err.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const updateSystemMutation = useMutation({
     mutationFn: (data: { trialDays?: number; referralRewardDays?: number }) =>
-      api<{ trialDays: number; referralRewardDays: number }>('/api/admin/settings', {
+      api<AdminSystemSettings>('/api/admin/settings', {
         method: 'PATCH',
         body: data,
       }),
@@ -75,6 +124,7 @@ export default function AdminSettingsPage() {
       queryClient.setQueryData(['admin-system-settings'], data);
       setTrialDays(String(data.trialDays));
       setReferralRewardDays(String(data.referralRewardDays));
+      void queryClient.invalidateQueries({ queryKey: ['admin-client-errors'] });
       toast({ title: 'Настройки сохранены', description: 'Системные настройки обновлены' });
     },
     onError: (err: any) => {
@@ -149,6 +199,87 @@ export default function AdminSettingsPage() {
           >
             {updateShopMutation.isPending ? 'Сохранение...' : 'Сохранить'}
           </Button>
+        </div>
+
+        <div className="glass-card rounded-xl p-6 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <Bug size={18} className="text-amber-500" />
+                Логи ошибок с сайта
+              </div>
+              <p className="text-xs text-muted-foreground max-w-xl">
+                Короткие сообщения (ошибки React, скрипты, необработанные промисы) от всех пользователей. Пишется в БД
+                только при включённом переключателе. Для проверки выключите, откройте сайт под пользователем — записей
+                быть не должно.
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="client-error-logging" className="text-sm whitespace-nowrap">
+                  {systemSettings?.clientErrorLoggingEnabled ? 'Вкл.' : 'Выкл.'}
+                </Label>
+                <Switch
+                  id="client-error-logging"
+                  checked={!!systemSettings?.clientErrorLoggingEnabled}
+                  onCheckedChange={(v) => toggleClientErrorLogging.mutate(v)}
+                  disabled={toggleClientErrorLogging.isPending}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => void refetchClientErrors()}
+                disabled={!systemSettings?.clientErrorLoggingEnabled}
+              >
+                Обновить журнал
+              </Button>
+            </div>
+          </div>
+
+          {systemSettings?.clientErrorLoggingEnabled && (
+            <div className="rounded-lg border border-border overflow-x-auto max-h-[280px] overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="text-left p-2 font-medium">Время</th>
+                    <th className="text-left p-2 font-medium">Тип</th>
+                    <th className="text-left p-2 font-medium">Сообщение</th>
+                    <th className="text-left p-2 font-medium">Страница</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(clientErrorLog?.rows ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-4 text-muted-foreground text-center">
+                        Пока нет записей. Вызовите тестовую ошибку на сайте (с включённым логированием).
+                      </td>
+                    </tr>
+                  ) : (
+                    (clientErrorLog?.rows ?? []).map((r: ClientErrorLogRow) => (
+                      <tr key={r.id} className="border-t border-border/60">
+                        <td className="p-2 whitespace-nowrap align-top">
+                          {new Date(r.createdAt).toLocaleString()}
+                        </td>
+                        <td className="p-2 align-top font-mono">{r.kind}</td>
+                        <td className="p-2 align-top break-all max-w-[280px]">{r.message}</td>
+                        <td className="p-2 align-top break-all max-w-[200px] text-muted-foreground">
+                          {r.href ?? '—'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              {clientErrorLog && clientErrorLog.total > (clientErrorLog.rows?.length ?? 0) && (
+                <p className="text-xs text-muted-foreground p-2 border-t">
+                  Показано {clientErrorLog.rows.length} из {clientErrorLog.total}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="glass-card rounded-xl p-6 space-y-5">

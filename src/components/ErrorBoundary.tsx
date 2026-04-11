@@ -5,6 +5,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ViewportScrollShell, viewportMainCentered } from '@/components/ViewportScrollShell';
+import { reportClientError } from '@/lib/report-client-error';
 
 interface Props {
   children: ReactNode;
@@ -36,10 +37,16 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Логируем ошибку в консоль для разработки
     if (process.env.NODE_ENV === 'development') {
       console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
+
+    reportClientError({
+      message: `${error.name}: ${error.message}`.slice(0, 500),
+      stack: error.stack,
+      componentStack: errorInfo.componentStack ?? undefined,
+      kind: 'boundary',
+    });
 
     this.setState({
       error,

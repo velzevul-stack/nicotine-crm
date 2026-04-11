@@ -525,7 +525,7 @@ export function Inventory() {
                                   className="border-b border-border/30 last:border-0 pb-3 last:pb-0"
                                 >
                                   <div className="flex items-start gap-3">
-                                    <div className="flex-1">
+                                    <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 mb-1">
                                         <h4 className="text-foreground text-sm font-medium">{t.flavor.name}</h4>
                                         {!t.barcode && (
@@ -554,11 +554,11 @@ export function Inventory() {
                                         </div>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex shrink-0 items-center gap-1 self-start pt-0.5 sm:gap-2">
                                       <button
                                         type="button"
                                         onClick={() => setEditItem(t)}
-                                        className="p-2 bg-card rounded-[10px] hover:bg-muted transition-colors"
+                                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-card rounded-[10px] hover:bg-muted transition-colors"
                                         aria-label={`Редактировать товар ${t.flavor.name}`}
                                       >
                                         <Edit2 size={14} className="text-muted-foreground" strokeWidth={1.5} />
@@ -566,14 +566,14 @@ export function Inventory() {
                                       <button
                                         type="button"
                                         onClick={() => updateQuantity(t.flavor.id, -1)}
-                                        className="p-2 bg-card rounded-[10px] active:scale-95 transition-transform disabled:opacity-30"
+                                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-card rounded-[10px] active:scale-95 transition-transform disabled:opacity-30"
                                         disabled={t.quantity === 0 || pendingFlavorRef.current.has(t.flavor.id)}
                                         aria-label={`Уменьшить остаток: ${t.flavor.name}`}
                                       >
                                         <Minus size={14} className="text-destructive" strokeWidth={2} />
                                       </button>
                                       <span
-                                        className={`font-mono font-bold text-base min-w-[2.5rem] text-center ${
+                                        className={`inline-block min-w-[3.25rem] text-center font-mono text-base font-bold tabular-nums ${
                                           t.quantity === 0
                                             ? 'text-destructive'
                                             : t.quantity <= 2
@@ -586,7 +586,7 @@ export function Inventory() {
                                       <button
                                         type="button"
                                         onClick={() => updateQuantity(t.flavor.id, 1)}
-                                        className="p-2 bg-card rounded-[10px] active:scale-95 transition-transform"
+                                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-card rounded-[10px] active:scale-95 transition-transform"
                                         disabled={pendingFlavorRef.current.has(t.flavor.id)}
                                         aria-label={`Увеличить остаток: ${t.flavor.name}`}
                                       >

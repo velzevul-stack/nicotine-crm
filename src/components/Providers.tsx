@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { applyTelegramMiniAppSwipeGuard } from '@/lib/telegram-mini-app';
+import { ClientErrorReporter } from '@/components/ClientErrorReporter';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -24,5 +25,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       })
   );
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ClientErrorReporter />
+      {children}
+    </QueryClientProvider>
+  );
 }

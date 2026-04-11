@@ -8,6 +8,7 @@ import {
   FlavorEntity,
   StockItemEntity,
 } from '@/lib/db/entities';
+import { isConsumableCategoryName } from '@/lib/consumable-category';
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -121,11 +122,15 @@ export async function GET(request: NextRequest) {
 
   const enrichedFlavors = flavors.map((f) => {
     const stock = stockMap.get(f.id);
+    const format = formats.find((pf) => pf.id === f.productFormatId);
+    const brand = format ? brands.find((b) => b.id === format.brandId) : null;
+    const cat = brand ? categoriesWithDefaults.find((c) => c.id === brand.categoryId) : null;
     return {
       ...f,
       quantity: stock?.quantity ?? 0,
       postQuantity: stock?.postQuantity ?? 0,
       reservedQuantity: stock?.reservedQuantity ?? 0,
+      isConsumableCategory: isConsumableCategoryName(cat?.name),
     };
   });
 

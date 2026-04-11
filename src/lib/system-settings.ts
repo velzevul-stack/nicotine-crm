@@ -5,6 +5,8 @@ import { SystemSettingsEntity } from '@/lib/db/entities';
 export const SETTINGS_KEYS = {
   TRIAL_DAYS: 'trial_days',
   REFERRAL_REWARD_DAYS: 'referral_reward_days',
+  /** Сохранять на сервер короткие логи ошибок с сайта (POST /api/client-errors). */
+  CLIENT_ERROR_LOGGING_ENABLED: 'client_error_logging_enabled',
 } as const;
 
 const DEFAULTS = {
@@ -30,4 +32,16 @@ export async function getTrialDays(): Promise<number> {
 
 export async function getReferralRewardDays(): Promise<number> {
   return getSettingValue(SETTINGS_KEYS.REFERRAL_REWARD_DAYS);
+}
+
+export async function getClientErrorLoggingEnabled(): Promise<boolean> {
+  const ds = await getDataSource();
+  const repo = ds.getRepository(SystemSettingsEntity);
+  const setting = await repo.findOne({ where: { key: SETTINGS_KEYS.CLIENT_ERROR_LOGGING_ENABLED } });
+  if (!setting) return false;
+  try {
+    return JSON.parse(setting.value) === true;
+  } catch {
+    return false;
+  }
 }

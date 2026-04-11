@@ -12,6 +12,7 @@ import {
 } from '@/lib/db/entities';
 import { z } from 'zod';
 import { logStockMovement } from '@/lib/stock-movement-log';
+import { buildConsumableFlavorIdSet } from '@/lib/consumable-category';
 
 const updateSchema = z.object({
   paymentType: z.enum(['cash', 'card', 'split', 'debt']).optional(),
@@ -117,6 +118,12 @@ export async function PATCH(
 
     // If items are being updated, recalculate totals and restore stock
     if (parsed.data.items !== undefined) {
+      const consumableFlavorIds = await buildConsumableFlavorIdSet(
+        em,
+        session.shopId,
+        [...new Set([...oldItems.map((o) => o.flavorId), ...parsed.data.items.map((i) => i.flavorId)])]
+      );
+
       // Restore stock from old items
       for (const oldItem of oldItems) {
         const stock = await em.getRepository(StockItemEntity).findOne({
@@ -128,7 +135,9 @@ export async function PATCH(
             const beforePostQty = stock.postQuantity ?? 0;
             const beforeReserved = stock.reservedQuantity ?? 0;
             stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - oldItem.quantity);
-            stock.postQuantity = beforePostQty + oldItem.quantity;
+            if (!consumableFlavorIds.has(oldItem.flavorId)) {
+              stock.postQuantity = beforePostQty + oldItem.quantity;
+            }
             await logStockMovement(em, {
               shopId: session.shopId,
               productId: oldItem.flavorId,
@@ -149,7 +158,9 @@ export async function PATCH(
             const beforeQty = stock.quantity;
             const beforePostQty = stock.postQuantity ?? 0;
             stock.quantity += oldItem.quantity;
-            stock.postQuantity = beforePostQty + oldItem.quantity;
+            if (!consumableFlavorIds.has(oldItem.flavorId)) {
+              stock.postQuantity = beforePostQty + oldItem.quantity;
+            }
             await logStockMovement(em, {
               shopId: session.shopId,
               productId: oldItem.flavorId,
@@ -191,13 +202,10 @@ export async function PATCH(
         });
         const warehouseAvailable = getWarehouseAvailable(stock);
         const postAvailable = getPostAvailable(stock);
-        if (
-          warehouseAvailable < it.quantity ||
-          postAvailable < it.quantity
-        ) {
-          throw new Error(
-            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${Math.min(warehouseAvailable, postAvailable)})`
-          );
+        const isCon = consumableFlavorIds.has(it.flavorId);
+        const avail = isCon ? warehouseAvailable : Math.min(warehouseAvailable, postAvailable);
+        if (warehouseAvailable < it.quantity || (!isCon && postAvailable < it.quantity)) {
+          throw new Error(`Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${avail})`);
         }
       }
 
@@ -466,6 +474,12 @@ export async function DELETE(
       where: { saleId: sale.id },
     });
 
+    const consumableFlavorIds = await buildConsumableFlavorIdSet(
+      em,
+      session.shopId,
+      items.map((i) => i.flavorId)
+    );
+
     // Restore stock
     for (const item of items) {
       const stock = await em.getRepository(StockItemEntity).findOne({
@@ -477,7 +491,9 @@ export async function DELETE(
           const beforePostQty = stock.postQuantity ?? 0;
           const beforeReserved = stock.reservedQuantity ?? 0;
           stock.reservedQuantity = Math.max(0, (stock.reservedQuantity ?? 0) - item.quantity);
-          stock.postQuantity = beforePostQty + item.quantity;
+          if (!consumableFlavorIds.has(item.flavorId)) {
+            stock.postQuantity = beforePostQty + item.quantity;
+          }
           await logStockMovement(em, {
             shopId: session.shopId,
             productId: item.flavorId,
@@ -498,7 +514,9 @@ export async function DELETE(
           const beforeQty = stock.quantity;
           const beforePostQty = stock.postQuantity ?? 0;
           stock.quantity += item.quantity;
-          stock.postQuantity = beforePostQty + item.quantity;
+          if (!consumableFlavorIds.has(item.flavorId)) {
+            stock.postQuantity = beforePostQty + item.quantity;
+          }
           await logStockMovement(em, {
             shopId: session.shopId,
             productId: item.flavorId,

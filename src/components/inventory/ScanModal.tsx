@@ -66,7 +66,7 @@ const MIN_GAP_MS = 450;
 const SAME_CODE_COOLDOWN_MS = 1800;
 const NOISE_CODE_WINDOW_MS = 900;
 
-/** Ждём появления узла в DOM (портал диалога) без долгой задержки — на Android длинный setTimeout ломает связь с user gesture и камеру снова «спрашивают». */
+/** Ждём появления узла в DOM (портал диалога) без долгой задержки — на Android длинный setTimeout ломает связь с user gesture. */
 function waitForElementById(elementId: string, isCancelled: () => boolean, maxFrames = 90): Promise<boolean> {
   return new Promise((resolve) => {
     let frames = 0;
@@ -148,10 +148,13 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
       if (!domReady || cancelled) return;
 
       try {
+        const isAndroid =
+          typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
         const scanner = new Html5Qrcode(readerId, {
           verbose: false,
           formatsToSupport: BARCODE_FORMATS,
-          useBarCodeDetectorIfSupported: true,
+          // На Android BarcodeDetector + повторный fallback по constraints давали второй getUserMedia.
+          useBarCodeDetectorIfSupported: !isAndroid,
         });
         scannerRef.current = scanner;
 
@@ -159,21 +162,13 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
         const maxPreviewW = Math.min(360, vw - 32);
 
         const config = {
-          // Выше fps — чаще попытка декода по кадру (лучше для линейных EAN/Code128)
           fps: 10,
-          // Выше и шире «окно» — тонкие 1D-коды чаще целиком попадают в кроп
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const w = Math.min(maxPreviewW, Math.floor(viewfinderWidth * 0.96));
             const h = Math.min(260, Math.max(140, Math.floor(viewfinderHeight * 0.52)));
             return { width: w, height: h };
           },
           aspectRatio: 1.25,
-          // Без max/advanced: на части Android OverconstrainedError → второй вызов start() и повторный запрос камеры
-          videoConstraints: {
-            facingMode: 'environment',
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
         };
 
         const onDecoded = (decodedText: string) => {
@@ -184,8 +179,6 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
           if (text === lastCodeRef.current && now - lastScanAtRef.current < SAME_CODE_COOLDOWN_MS) return;
           const lastAccepted = lastAcceptedRef.current;
           if (lastAccepted && text !== lastAccepted.code && now - lastAccepted.at < NOISE_CODE_WINDOW_MS) {
-            // Many handheld scanners/cameras emit a second random decode shortly after a valid one.
-            // Keep the first code and drop noisy immediate alternatives.
             return;
           }
 
@@ -197,18 +190,18 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
           onScanRef.current(text);
         };
 
-        try {
-          await scanner.start({ facingMode: 'environment' }, config, onDecoded, () => {});
-        } catch {
-          const devices = await Html5Qrcode.getCameras();
-          if (!devices?.length) {
-            if (!cancelled) setError('Камера не найдена');
-            return;
-          }
-          const back = devices.find((d) => /back|rear|environment|задн/i.test(d.label));
-          const cameraId = back?.id ?? devices[devices.length - 1].id;
-          await scanner.start(cameraId, config, onDecoded, () => {});
+        const devices = await Html5Qrcode.getCameras();
+        if (!devices?.length) {
+          if (!cancelled) setError('Камера не найдена');
+          return;
         }
+        const back = devices.find((d) => /back|rear|environment|задн/i.test(d.label));
+        const cameraId = back?.id ?? devices[devices.length - 1]?.id;
+        if (!cameraId) {
+          if (!cancelled) setError('Камера не найдена');
+          return;
+        }
+        await scanner.start(cameraId, config, onDecoded, () => {});
       } catch (err: unknown) {
         console.error(err);
         const e = err as { name?: string };
@@ -225,26 +218,8 @@ export function ScanModal({ open, onOpenChange, onScan }: ScanModalProps) {
 
     void startScanner();
 
-    let removePermListener: (() => void) | undefined;
-    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
-      void navigator.permissions
-        .query({ name: 'camera' as PermissionName })
-        .then((status) => {
-          const onChange = () => {
-            if (status.state === 'granted' && open) {
-              setError(null);
-              setScanAttempt((n) => n + 1);
-            }
-          };
-          status.addEventListener('change', onChange);
-          removePermListener = () => status.removeEventListener('change', onChange);
-        })
-        .catch(() => {});
-    }
-
     return () => {
       cancelled = true;
-      removePermListener?.();
       void stopScanner();
     };
   }, [open, scanAttempt, readerId, stopScanner]);

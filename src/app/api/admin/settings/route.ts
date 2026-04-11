@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { checkUserSubscription } from '@/lib/auth-utils';
 import { getDataSource } from '@/lib/db/data-source';
 import { SystemSettingsEntity } from '@/lib/db/entities';
-import { SETTINGS_KEYS } from '@/lib/system-settings';
+import { SETTINGS_KEYS, getClientErrorLoggingEnabled } from '@/lib/system-settings';
 
 export async function GET() {
   const session = await getSession();
@@ -19,10 +19,12 @@ export async function GET() {
 
   const trialSetting = await repo.findOne({ where: { key: SETTINGS_KEYS.TRIAL_DAYS } });
   const referralSetting = await repo.findOne({ where: { key: SETTINGS_KEYS.REFERRAL_REWARD_DAYS } });
+  const clientErrorLoggingEnabled = await getClientErrorLoggingEnabled();
 
   return NextResponse.json({
     trialDays: trialSetting ? JSON.parse(trialSetting.value) : 7,
     referralRewardDays: referralSetting ? JSON.parse(referralSetting.value) : 14,
+    clientErrorLoggingEnabled,
   });
 }
 
@@ -67,11 +69,30 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  if (typeof body.clientErrorLoggingEnabled === 'boolean') {
+    let setting = await repo.findOne({ where: { key: SETTINGS_KEYS.CLIENT_ERROR_LOGGING_ENABLED } });
+    const val = JSON.stringify(body.clientErrorLoggingEnabled);
+    if (setting) {
+      setting.value = val;
+      await repo.save(setting);
+    } else {
+      await repo.save(
+        repo.create({
+          key: SETTINGS_KEYS.CLIENT_ERROR_LOGGING_ENABLED,
+          value: val,
+          description: 'Сохранять на сервер короткие логи ошибок с сайта (клиенты)',
+        })
+      );
+    }
+  }
+
   const trialSetting = await repo.findOne({ where: { key: SETTINGS_KEYS.TRIAL_DAYS } });
   const referralSetting = await repo.findOne({ where: { key: SETTINGS_KEYS.REFERRAL_REWARD_DAYS } });
+  const clientErrorLoggingEnabled = await getClientErrorLoggingEnabled();
 
   return NextResponse.json({
     trialDays: trialSetting ? JSON.parse(trialSetting.value) : 7,
     referralRewardDays: referralSetting ? JSON.parse(referralSetting.value) : 14,
+    clientErrorLoggingEnabled,
   });
 }

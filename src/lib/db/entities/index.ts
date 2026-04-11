@@ -15,6 +15,7 @@ export type { PostFormat, PostFormatConfig } from './PostFormat';
 export { PostFormatSuggestionEntity } from './PostFormatSuggestion';
 export { UserStatsEntity } from './UserStats';
 export { SystemSettingsEntity } from './SystemSettings';
+export { ClientErrorLogEntity, type ClientErrorLog } from './ClientErrorLog';
 export { CardEntity } from './Card';
 export { CryptoPaymentEntity, type CryptoPayment } from './CryptoPayment';
 export { ReferralEarningEntity, type ReferralEarning } from './ReferralEarning';

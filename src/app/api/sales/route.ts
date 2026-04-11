@@ -7,13 +7,13 @@ import {
   StockItemEntity,
   type StockItem,
   FlavorEntity,
-  ProductFormatEntity,
   DebtEntity,
   DebtOperationEntity,
 } from '@/lib/db/entities';
 import { In } from 'typeorm';
 import { z } from 'zod';
 import { logStockMovement } from '@/lib/stock-movement-log';
+import { buildConsumableFlavorIdSet } from '@/lib/consumable-category';
 
 const itemSchema = z.object({
   flavorId: z.string().uuid(),
@@ -161,6 +161,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await ds.transaction(async (em) => {
+    const consumableFlavorIds = await buildConsumableFlavorIdSet(
+      em,
+      session.shopId,
+      items.map((i) => i.flavorId)
+    );
+
     // Validate stock and flavor ownership
     for (const it of items) {
       // Проверяем, что flavor принадлежит правильному магазину
@@ -178,17 +184,21 @@ export async function POST(request: NextRequest) {
       });
       const warehouseAvailable = getWarehouseAvailable(stock);
       const postAvailable = getPostAvailable(stock);
-      
+      const isConsumable = consumableFlavorIds.has(it.flavorId);
+      const availableForSale = isConsumable
+        ? warehouseAvailable
+        : Math.min(warehouseAvailable, postAvailable);
+
       if (isReservation) {
-        if (warehouseAvailable < it.quantity || postAvailable < it.quantity) {
+        if (warehouseAvailable < it.quantity || (!isConsumable && postAvailable < it.quantity)) {
           throw new Error(
-            `Недостаточно товара для резерва: ${it.flavorNameSnapshot} (доступно ${Math.min(warehouseAvailable, postAvailable)})`
+            `Недостаточно товара для резерва: ${it.flavorNameSnapshot} (доступно ${availableForSale})`
           );
         }
       } else {
-        if (warehouseAvailable < it.quantity || postAvailable < it.quantity) {
+        if (warehouseAvailable < it.quantity || (!isConsumable && postAvailable < it.quantity)) {
           throw new Error(
-            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${Math.min(warehouseAvailable, postAvailable)})`
+            `Недостаточно товара: ${it.flavorNameSnapshot} (доступно ${availableForSale})`
           );
         }
       }
