@@ -24,8 +24,9 @@ export function buildSalesSearchItems(params: {
 
   const items: SalesSearchItem[] = [];
   for (const flavor of flavors) {
+    if (flavor.isActive === false) continue;
     const format = formatById.get(flavor.productFormatId);
-    if (!format) continue;
+    if (!format || format.isActive === false) continue;
     const brand = brandById.get(format.brandId);
     if (!brand) continue;
     const availableQty = flavorAvailableQuantity(flavor);

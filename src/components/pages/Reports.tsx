@@ -4,6 +4,8 @@ import { useState, useMemo, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { ScreenHelpDialog } from '@/components/ScreenHelpDialog';
+import { HELP_REPORTS } from '@/lib/screen-help-content';
 import {
   ChevronRight,
   Banknote,
@@ -31,6 +33,7 @@ import { api } from '@/lib/api-client';
 import { format, startOfDay, endOfDay, eachDayOfInterval, subDays, startOfMonth, startOfWeek, startOfYear } from 'date-fns';
 import { ru } from 'date-fns/locale/ru';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
+import { filterNonNegativeDecimalInput, parseNonNegativeDecimal } from '@/lib/numeric-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -394,8 +397,8 @@ export function Reports() {
   const saveEdit = () => {
     if (!editingSale || editItems.length === 0) return;
     const editSubtotal = editItems.reduce((s, i) => s + i.lineTotal, 0);
-    const editDiscountAmount = editDiscount ? parseFloat(editDiscount) || 0 : 0;
-    const editDeliveryAmount = Math.max(0, editDelivery ? parseFloat(editDelivery) || 0 : 0);
+    const editDiscountAmount = parseNonNegativeDecimal(editDiscount, 0);
+    const editDeliveryAmount = Math.max(0, parseNonNegativeDecimal(editDelivery, 0));
     const editTotal = Math.max(0, editSubtotal - editDiscountAmount + editDeliveryAmount);
 
     const payload: any = {
@@ -420,8 +423,8 @@ export function Reports() {
       comment: editComment || null,
     };
     if (editPayment === 'split') {
-      const cash = parseFloat(editSplitCash) || 0;
-      const card = parseFloat(editSplitCard) || 0;
+      const cash = parseNonNegativeDecimal(editSplitCash, 0);
+      const card = parseNonNegativeDecimal(editSplitCard, 0);
       if (Math.abs(cash + card - editTotal) > 0.01) return;
       payload.cashAmount = cash;
       payload.cardAmount = card;
@@ -457,11 +460,14 @@ export function Reports() {
         title="Отчёты"
         subtitle="История продаж по дням"
         actions={
-          <Link href="/dashboard">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-              <ArrowLeft size={16} />
-            </Button>
-          </Link>
+          <>
+            <ScreenHelpDialog help={HELP_REPORTS} />
+            <Link href="/dashboard">
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                <ArrowLeft size={16} />
+              </Button>
+            </Link>
+          </>
         }
       />
       
@@ -906,18 +912,22 @@ export function Reports() {
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Наличные</label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
                       value={editSplitCash}
-                      onChange={(e) => setEditSplitCash(e.target.value)}
+                      onChange={(e) => setEditSplitCash(filterNonNegativeDecimalInput(e.target.value))}
                       placeholder="0"
                     />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Карта</label>
                     <Input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
                       value={editSplitCard}
-                      onChange={(e) => setEditSplitCard(e.target.value)}
+                      onChange={(e) => setEditSplitCard(filterNonNegativeDecimalInput(e.target.value))}
                       placeholder="0"
                     />
                   </div>
@@ -1003,9 +1013,11 @@ export function Reports() {
                   Скидка
                 </label>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
                   value={editDiscount}
-                  onChange={(e) => setEditDiscount(e.target.value)}
+                  onChange={(e) => setEditDiscount(filterNonNegativeDecimalInput(e.target.value))}
                   placeholder="0"
                   onFocus={(e) => {
                     if (e.target.value === '0') {
@@ -1019,11 +1031,11 @@ export function Reports() {
                   Доставка
                 </label>
                 <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
                   value={editDelivery}
-                  onChange={(e) => setEditDelivery(e.target.value)}
+                  onChange={(e) => setEditDelivery(filterNonNegativeDecimalInput(e.target.value))}
                   placeholder="0"
                 />
               </div>
@@ -1039,12 +1051,12 @@ export function Reports() {
                 />
               </div>
               <div className="border-t border-border pt-2 space-y-1">
-                {(editDelivery ? parseFloat(editDelivery) || 0 : 0) > 0 && (
+                {parseNonNegativeDecimal(editDelivery, 0) > 0 && (
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Доставка</span>
                     <span className="font-mono-nums">
                       {formatCurrency(
-                        Math.max(0, editDelivery ? parseFloat(editDelivery) || 0 : 0),
+                        Math.max(0, parseNonNegativeDecimal(editDelivery, 0)),
                         shopData?.currency
                       )}
                     </span>
@@ -1057,8 +1069,8 @@ export function Reports() {
                       Math.max(
                         0,
                         editItems.reduce((s, i) => s + i.lineTotal, 0) -
-                          (editDiscount ? parseFloat(editDiscount) || 0 : 0) +
-                          Math.max(0, editDelivery ? parseFloat(editDelivery) || 0 : 0)
+                          parseNonNegativeDecimal(editDiscount, 0) +
+                          Math.max(0, parseNonNegativeDecimal(editDelivery, 0))
                       ),
                       shopData?.currency
                     )}

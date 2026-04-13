@@ -3,8 +3,13 @@
 import { useState, useRef, useCallback, useReducer } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { Search, Plus, Minus, ChevronDown, PackagePlus, ScanLine, Edit2, Filter, Folder, Tag } from 'lucide-react';
+import { ScreenHelpDialog } from '@/components/ScreenHelpDialog';
+import { HELP_INVENTORY } from '@/lib/screen-help-content';
+import { Search, Plus, Minus, ChevronDown, PackagePlus, ScanLine, Edit2, Filter, Folder, Tag, EyeOff } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { ScanModal } from '@/components/inventory/ScanModal';
@@ -20,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useInventoryFilters } from '@/hooks/useInventoryFilters';
 import { getCurrencySymbol } from '@/lib/currency';
+import { filterDigitsOnly, parsePositiveInt } from '@/lib/numeric-input';
 
 interface TreeItem {
   category: any;
@@ -31,6 +37,111 @@ interface TreeItem {
   reservedQuantity: number;
   costPrice: number;
   barcode: string | null;
+}
+
+function InventoryBulkQtyPopover({
+  flavorId,
+  flavorName,
+  quantity,
+  pending,
+  onApplyDelta,
+}: {
+  flavorId: string;
+  flavorName: string;
+  quantity: number;
+  pending: boolean;
+  onApplyDelta: (flavorId: string, delta: number) => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [raw, setRaw] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const parsed = Math.min(999, Math.max(0, parsePositiveInt(raw, 0)));
+
+  const run = async (sign: 1 | -1) => {
+    const n = parsed;
+    if (n < 1) {
+      toast({
+        title: 'Укажите число',
+        description: 'Введите количество от 1 до 999',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (sign < 0 && n > quantity) {
+      toast({
+        title: 'Слишком много',
+        description: 'Нельзя списать больше, чем есть на остатке',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      await onApplyDelta(flavorId, sign * n);
+      setOpen(false);
+      setRaw('');
+    } catch {
+      // Ошибку показывает мутация updateStock
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setRaw('');
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-8 min-w-[2rem] shrink-0 items-center justify-center rounded-lg px-1 text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:bg-background/90 hover:text-foreground active:scale-95 disabled:opacity-30"
+          disabled={pending}
+          title="Добавить или списать несколько штук за раз"
+          aria-label={`Несколько штук: ${flavorName}`}
+        >
+          N
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(100vw-2rem,18rem)] p-3" align="end" sideOffset={6}>
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-foreground">Несколько штук</p>
+          <Label htmlFor={`bulk-qty-${flavorId}`} className="text-[11px] leading-snug text-muted-foreground">
+            Сейчас: {quantity} шт. Укажите, сколько добавить или списать (1–999)
+          </Label>
+          <Input
+            id={`bulk-qty-${flavorId}`}
+            inputMode="numeric"
+            autoComplete="off"
+            className="h-9"
+            value={raw}
+            onChange={(e) => setRaw(filterDigitsOnly(e.target.value).slice(0, 3))}
+            placeholder="10"
+          />
+          <div className="flex gap-2 pt-0.5">
+            <Button type="button" size="sm" className="flex-1 rounded-[10px]" disabled={pending || busy} onClick={() => void run(1)}>
+              Добавить
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="flex-1 rounded-[10px]"
+              disabled={pending || busy || quantity === 0}
+              onClick={() => void run(-1)}
+            >
+              Списать
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function Inventory() {
@@ -72,6 +183,7 @@ export function Inventory() {
       params.set('inStockOnly', filters.inStockOnly ? '1' : '0');
       params.set('noBarcode', filters.noBarcode ? '1' : '0');
       params.set('showReservedOnly', filters.showReservedOnly ? '1' : '0');
+      params.set('includeInactive', filters.includeInactive ? '1' : '0');
       if (filters.selectedCategory) params.set('categoryId', filters.selectedCategory);
       if (filters.selectedStrength) params.set('strength', filters.selectedStrength);
       if (filters.selectedBrand) params.set('brandId', filters.selectedBrand);
@@ -259,18 +371,26 @@ export function Inventory() {
 
   if (isLoading && !data) {
     return (
-      <>
-        <ScreenHeader title="Склад" subtitle="Загрузка..." />
-        <div className="px-4 py-8 text-center text-muted-foreground">Загрузка...</div>
-      </>
+      <div className="flex w-full min-w-0 flex-col">
+        <ScreenHeader
+          title="Склад"
+          subtitle="Загрузка..."
+          actions={<ScreenHelpDialog help={HELP_INVENTORY} />}
+        />
+        <div className="w-full min-w-0 px-4 py-8 text-center text-muted-foreground">Загрузка...</div>
+      </div>
     );
   }
 
   if (isError && !data) {
     return (
-      <>
-        <ScreenHeader title="Склад" subtitle="Ошибка загрузки" />
-        <div className="px-5 py-8 space-y-4 text-center">
+      <div className="flex w-full min-w-0 flex-col">
+        <ScreenHeader
+          title="Склад"
+          subtitle="Ошибка загрузки"
+          actions={<ScreenHelpDialog help={HELP_INVENTORY} />}
+        />
+        <div className="w-full min-w-0 space-y-4 px-5 py-8 text-center">
           <p className="text-sm text-muted-foreground">
             {error instanceof Error ? error.message : 'Не удалось загрузить склад'}
           </p>
@@ -278,7 +398,7 @@ export function Inventory() {
             Повторить
           </Button>
         </div>
-      </>
+      </div>
     );
   }
 
@@ -286,6 +406,7 @@ export function Inventory() {
     filters.inStockOnly,
     filters.noBarcode,
     filters.showReservedOnly,
+    filters.includeInactive,
     filters.selectedCategory !== null,
     filters.selectedStrength !== null,
     filters.selectedBrand !== null,
@@ -295,10 +416,14 @@ export function Inventory() {
   ].filter(Boolean).length;
 
   return (
-    <>
-      <ScreenHeader title="Склад" subtitle={`${totalItems} единиц на складе`} />
+    <div className="flex min-h-0 w-full min-w-0 flex-col">
+      <ScreenHeader
+        title="Склад"
+        subtitle={`${totalItems} единиц на складе`}
+        actions={<ScreenHelpDialog help={HELP_INVENTORY} />}
+      />
 
-      <div className="px-5 space-y-4">
+      <div className="w-full min-w-0 space-y-4 px-5 pb-[max(10rem,calc(6.5rem+env(safe-area-inset-bottom,0px)))]">
         {isError && data && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl border border-destructive/30 bg-destructive/5 text-sm">
             <span className="text-muted-foreground flex-1">
@@ -405,7 +530,7 @@ export function Inventory() {
           </div>
         </section>
 
-        <section className="space-y-6 pb-20">
+        <section className="min-w-0 space-y-6 pb-2">
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground text-sm">Загрузка...</div>
           ) : categories.length === 0 ? (
@@ -449,9 +574,19 @@ export function Inventory() {
                   const totalQty = formatItems.reduce((s, t) => s + t.quantity, 0);
                   const brand = brands.find((b: any) => b.id === format.brandId);
                   
+                  const formatInactive = format.isActive === false;
                   return (
-                    <div key={format.id} className="bg-card rounded-[20px] overflow-hidden border border-border">
-                      <div className="flex items-center gap-3 px-5 py-4">
+                    <div
+                      key={format.id}
+                      className={`bg-card rounded-[20px] overflow-hidden border ${
+                        formatInactive ? 'border-amber-500/35 ring-1 ring-amber-500/15' : 'border-border'
+                      }`}
+                    >
+                      <div
+                        className={`flex items-center gap-3 px-5 py-4 ${
+                          formatInactive ? 'bg-amber-500/[0.06]' : ''
+                        }`}
+                      >
                         <button
                           type="button"
                           onClick={() => toggleFormat(format.id)}
@@ -462,7 +597,19 @@ export function Inventory() {
                           <span className="text-xl">{brand?.emojiPrefix}</span>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-foreground font-semibold text-sm">{format.name}</span>
+                              <span
+                                className={`font-semibold text-sm ${
+                                  formatInactive ? 'text-muted-foreground' : 'text-foreground'
+                                }`}
+                              >
+                                {format.name}
+                              </span>
+                              {formatInactive && (
+                                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-950 dark:text-amber-100">
+                                  <EyeOff size={12} strokeWidth={2} className="shrink-0 opacity-90" aria-hidden />
+                                  Линейка вне каталога
+                                </span>
+                              )}
                               {format.strengthLabel && (
                                 <>
                                   <span className="text-muted-foreground text-xs">•</span>
@@ -504,98 +651,147 @@ export function Inventory() {
                           </button>
                         )}
                       </div>
-                      <AnimatePresence>
+                      <AnimatePresence initial={false}>
                         {isExpanded && (
                           <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="overflow-hidden bg-background"
+                            key={`${format.id}-body`}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="border-t border-border/25 bg-background"
                           >
-                            <div className="px-5 py-3 space-y-3">
+                            <div className="space-y-2 px-5 py-2.5">
                               {formatItems.length === 0 ? (
                                 <p className="text-sm text-muted-foreground py-2">
                                   Нет вкусов или нет строк по текущим фильтрам. Отредактируйте бренд кнопкой справа или примите товар.
                                 </p>
                               ) : (
-                              formatItems.map((t) => (
+                              formatItems.map((t) => {
+                                const notInCatalog =
+                                  t.flavor.isActive === false || (t.format?.isActive === false);
+                                const hiddenByFlavor = t.flavor.isActive === false;
+                                const hiddenByFormat = t.format?.isActive === false;
+                                return (
                                 <div
                                   key={t.flavor.id}
-                                  className="border-b border-border/30 last:border-0 pb-3 last:pb-0"
+                                  className="border-b border-border/30 last:border-0 pb-2.5 last:pb-0"
                                 >
-                                  <div className="flex items-start gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <h4 className="text-foreground text-sm font-medium">{t.flavor.name}</h4>
-                                        {!t.barcode && (
-                                          <span className="px-2 py-0.5 bg-destructive/20 text-destructive text-xs rounded-full">
-                                            Без штрихкода
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                        <span>
-                                          Себестоимость: {t.costPrice} {getCurrencySymbol(shopData?.currency)}
-                                        </span>
-                                        <span>•</span>
-                                        <span>Цена: {t.format?.unitPrice ?? format.unitPrice}{getCurrencySymbol(shopData?.currency)}</span>
-                                      </div>
-                                      {t.reservedQuantity > 0 && (
-                                        <div className="flex items-center gap-2 mt-2">
-                                          <span className="text-xs text-muted-foreground">Резерв: {t.reservedQuantity} шт</span>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleReserveSellClick(t.flavor.id)}
-                                            className="px-2 py-1 bg-primary/20 text-primary text-xs rounded-[8px] hover:bg-primary/30 transition-colors"
-                                          >
-                                            Продать
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="flex shrink-0 items-center gap-1 self-start pt-0.5 sm:gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditItem(t)}
-                                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-card rounded-[10px] hover:bg-muted transition-colors"
-                                        aria-label={`Редактировать товар ${t.flavor.name}`}
-                                      >
-                                        <Edit2 size={14} className="text-muted-foreground" strokeWidth={1.5} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => updateQuantity(t.flavor.id, -1)}
-                                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-card rounded-[10px] active:scale-95 transition-transform disabled:opacity-30"
-                                        disabled={t.quantity === 0 || pendingFlavorRef.current.has(t.flavor.id)}
-                                        aria-label={`Уменьшить остаток: ${t.flavor.name}`}
-                                      >
-                                        <Minus size={14} className="text-destructive" strokeWidth={2} />
-                                      </button>
-                                      <span
-                                        className={`inline-block min-w-[3.25rem] text-center font-mono text-base font-bold tabular-nums ${
-                                          t.quantity === 0
-                                            ? 'text-destructive'
-                                            : t.quantity <= 2
-                                              ? 'text-muted-foreground'
-                                              : 'text-foreground'
+                                  <div
+                                    className={`min-w-0 space-y-1 ${
+                                      notInCatalog
+                                        ? 'rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-2 py-1.5 sm:px-2.5'
+                                        : ''
+                                    }`}
+                                  >
+                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                      <h4
+                                        className={`break-words text-sm font-medium ${
+                                          notInCatalog ? 'text-muted-foreground' : 'text-foreground'
                                         }`}
                                       >
-                                        {t.quantity}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => updateQuantity(t.flavor.id, 1)}
-                                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-card rounded-[10px] active:scale-95 transition-transform"
-                                        disabled={pendingFlavorRef.current.has(t.flavor.id)}
-                                        aria-label={`Увеличить остаток: ${t.flavor.name}`}
-                                      >
-                                        <Plus size={14} className="text-primary" strokeWidth={2} />
-                                      </button>
+                                        {t.flavor.name}
+                                      </h4>
+                                      {!t.barcode && (
+                                        <span className="shrink-0 rounded-full bg-destructive/20 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+                                          Без штрихкода
+                                        </span>
+                                      )}
+                                      {notInCatalog && (
+                                        <span
+                                          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/45 bg-amber-500/12 px-2 py-0.5 text-[11px] font-medium text-amber-950 dark:text-amber-100"
+                                          title={
+                                            hiddenByFlavor && hiddenByFormat
+                                              ? 'Вкус и линейка выключены в каталоге'
+                                              : hiddenByFormat
+                                                ? 'Линейка выключена — все вкусы не в продаже'
+                                                : 'Этот вкус выключен в каталоге'
+                                          }
+                                        >
+                                          <EyeOff size={12} strokeWidth={2} className="shrink-0 opacity-90" aria-hidden />
+                                          Вне каталога
+                                          {hiddenByFlavor && hiddenByFormat
+                                            ? ' (вкус+линейка)'
+                                            : hiddenByFormat
+                                              ? ' (линейка)'
+                                              : ' (вкус)'}
+                                        </span>
+                                      )}
                                     </div>
+                                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+                                      <p className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground">
+                                        Себестоимость {t.costPrice} {getCurrencySymbol(shopData?.currency)} · Цена{' '}
+                                        {t.format?.unitPrice ?? format.unitPrice} {getCurrencySymbol(shopData?.currency)}
+                                      </p>
+                                      <div
+                                        className="flex shrink-0 touch-manipulation items-center rounded-xl border border-border/50 bg-muted/30 p-0.5 shadow-sm"
+                                        role="group"
+                                        aria-label={`Остаток и действия: ${t.flavor.name}`}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditItem(t)}
+                                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-background/90 hover:text-foreground active:scale-95"
+                                          aria-label={`Редактировать товар ${t.flavor.name}`}
+                                        >
+                                          <Edit2 size={15} strokeWidth={1.5} />
+                                        </button>
+                                        <span className="mx-0.5 h-5 w-px shrink-0 bg-border/60" aria-hidden />
+                                        <button
+                                          type="button"
+                                          onClick={() => updateQuantity(t.flavor.id, -1)}
+                                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-background/90 active:scale-95 disabled:opacity-30"
+                                          disabled={t.quantity === 0 || pendingFlavorRef.current.has(t.flavor.id)}
+                                          aria-label={`Уменьшить остаток: ${t.flavor.name}`}
+                                        >
+                                          <Minus size={16} className="text-destructive" strokeWidth={2} />
+                                        </button>
+                                        <span
+                                          className={`min-w-[1.75rem] px-0.5 text-center font-mono text-sm font-bold tabular-nums ${
+                                            t.quantity === 0
+                                              ? 'text-destructive'
+                                              : t.quantity <= 2
+                                                ? 'text-muted-foreground'
+                                                : 'text-foreground'
+                                          }`}
+                                        >
+                                          {t.quantity}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => updateQuantity(t.flavor.id, 1)}
+                                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-background/90 active:scale-95"
+                                          disabled={pendingFlavorRef.current.has(t.flavor.id)}
+                                          aria-label={`Увеличить остаток: ${t.flavor.name}`}
+                                        >
+                                          <Plus size={16} className="text-primary" strokeWidth={2} />
+                                        </button>
+                                        <span className="mx-0.5 h-5 w-px shrink-0 bg-border/60" aria-hidden />
+                                        <InventoryBulkQtyPopover
+                                          flavorId={t.flavor.id}
+                                          flavorName={t.flavor.name}
+                                          quantity={t.quantity}
+                                          pending={pendingFlavorRef.current.has(t.flavor.id)}
+                                          onApplyDelta={updateQuantity}
+                                        />
+                                      </div>
+                                    </div>
+                                    {t.reservedQuantity > 0 && (
+                                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                        <span className="text-[11px] text-muted-foreground">Резерв {t.reservedQuantity} шт</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleReserveSellClick(t.flavor.id)}
+                                          className="rounded-md bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/25"
+                                        >
+                                          Продать
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                              ))
+                                );
+                              })
                               )}
                             </div>
                           </motion.div>
@@ -740,6 +936,6 @@ export function Inventory() {
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

@@ -3,11 +3,21 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { ScreenHelpDialog } from '@/components/ScreenHelpDialog';
+import { HELP_SALES } from '@/lib/screen-help-content';
 import { Search, Plus, Minus, X, ShoppingCart, CreditCard, Banknote, Wallet, ChevronRight, ArrowLeft, Clock, ScanLine } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
+import { filterNonNegativeDecimalInput, parseNonNegativeDecimal } from '@/lib/numeric-input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { DateTimePicker } from '@/components/ui/datetime-picker';
 import { useToast } from '@/hooks/use-toast';
 import { flavorAvailableQuantity } from '@/lib/flavor-available-qty';
@@ -178,15 +188,23 @@ export function Sales() {
     );
     if (exactMatches.length === 1) {
       addToCart(exactMatches[0].flavorId);
-      setIsScanOpen(false);
+      const m = exactMatches[0];
+      toast({
+        title: 'В корзину',
+        description: `${m.brandName} ${m.formatName} ${m.flavorName}`,
+        duration: 2800,
+      });
       return;
     }
     if (exactMatches.length === 0) {
-      setError('Товар по штрихкоду не найден, проверьте код или выберите вручную');
+      const msg = 'Товар по штрихкоду не найден, проверьте код или выберите вручную';
+      setError(msg);
+      toast({ title: 'Не найдено', description: msg, variant: 'destructive' });
     } else {
-      setError('Найдено несколько товаров по штрихкоду, выберите нужный из списка');
+      const msg = 'Найдено несколько товаров по штрихкоду, выберите нужный из списка';
+      setError(msg);
+      toast({ title: 'Несколько совпадений', description: msg, variant: 'destructive' });
     }
-    setIsScanOpen(false);
   };
 
   const updateCartQty = (flavorId: string, delta: number) => {
@@ -225,9 +243,9 @@ export function Sales() {
   };
 
   const subtotal = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
-  const discountInput = discount ? parseFloat(discount) || 0 : 0;
+  const discountInput = parseNonNegativeDecimal(discount, 0);
   const discountAmount = Math.min(discountInput, subtotal); // Скидка не может быть больше стоимости
-  const deliveryAmount = Math.max(0, delivery ? parseFloat(delivery) || 0 : 0);
+  const deliveryAmount = Math.max(0, parseNonNegativeDecimal(delivery, 0));
   const total = Math.max(0, subtotal - discountAmount + deliveryAmount);
 
   useEffect(() => {
@@ -282,8 +300,8 @@ export function Sales() {
     }
 
     if (paymentType === 'split') {
-      const cashVal = parseFloat(splitCash) || 0;
-      const cardVal = parseFloat(splitCard) || 0;
+      const cashVal = parseNonNegativeDecimal(splitCash, 0);
+      const cardVal = parseNonNegativeDecimal(splitCard, 0);
       if (Math.abs(cashVal + cardVal - total) > 0.01) {
         setError(`Сумма наличных и карты должна равняться итогу (${total})`);
         return;
@@ -299,10 +317,6 @@ export function Sales() {
     }
     if (discountInput < 0) {
       setError('Скидка не может быть отрицательной');
-      return;
-    }
-    if (delivery && (parseFloat(delivery) || 0) < 0) {
-      setError('Стоимость доставки не может быть отрицательной');
       return;
     }
     setError('');
@@ -328,8 +342,8 @@ export function Sales() {
       items,
     };
     if (effectivePaymentType === 'split') {
-      payload.cashAmount = parseFloat(splitCash) || 0;
-      payload.cardAmount = parseFloat(splitCard) || 0;
+      payload.cashAmount = parseNonNegativeDecimal(splitCash, 0);
+      payload.cardAmount = parseNonNegativeDecimal(splitCard, 0);
     }
     if ((effectivePaymentType === 'card' || effectivePaymentType === 'split') && selectedCardId) {
       payload.cardId = selectedCardId;
@@ -348,6 +362,7 @@ export function Sales() {
       <ScreenHeader
         title="Продажа"
         subtitle={cart.length > 0 ? `${cart.length} позиций в корзине` : 'Добавьте товары'}
+        actions={<ScreenHelpDialog help={HELP_SALES} />}
       />
 
       <div className="px-4 space-y-4 pb-4">
@@ -583,18 +598,24 @@ export function Sales() {
             </div>
 
             {(paymentType === 'card' || paymentType === 'split') && !isDebt && cards.length > 0 && (
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Карта</label>
-                <select
-                  value={selectedCardId ?? ''}
-                  onChange={(e) => setSelectedCardId(e.target.value || null)}
-                  className="w-full py-3 px-4 rounded-[14px] bg-muted border border-border text-sm"
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground block">Карта</label>
+                <Select
+                  value={selectedCardId ?? '__none__'}
+                  onValueChange={(v) => setSelectedCardId(v === '__none__' ? null : v)}
                 >
-                  <option value="">Без привязки</option>
-                  {cards.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-12 w-full rounded-[14px] border border-border bg-muted px-4 text-sm">
+                    <SelectValue placeholder="Выберите карту" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[120]">
+                    <SelectItem value="__none__">Без привязки</SelectItem>
+                    {cards.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
             {paymentType === 'split' && !isDebt && (
@@ -606,29 +627,33 @@ export function Sales() {
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Наличные</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
                     placeholder="0"
-                    min="0"
-                    step="0.01"
                     value={splitCash}
-                    onChange={(e) => setSplitCash(e.target.value)}
+                    onChange={(e) => setSplitCash(filterNonNegativeDecimalInput(e.target.value))}
                     className="w-full py-3 px-4 rounded-[14px] bg-muted border border-border text-sm font-mono-nums placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Карта</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
                     placeholder="0"
-                    min="0"
-                    step="0.01"
                     value={splitCard}
-                    onChange={(e) => setSplitCard(e.target.value)}
+                    onChange={(e) => setSplitCard(filterNonNegativeDecimalInput(e.target.value))}
                     className="w-full py-3 px-4 rounded-[14px] bg-muted border border-border text-sm font-mono-nums placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
                 <p className="col-span-2 text-xs text-muted-foreground">
-                  Итого: {formatCurrency(total, shopData?.currency)} • Наличные + Карта = {formatCurrency((parseFloat(splitCash) || 0) + (parseFloat(splitCard) || 0), shopData?.currency)}
+                  Итого: {formatCurrency(total, shopData?.currency)} • Наличные + Карта ={' '}
+                  {formatCurrency(
+                    parseNonNegativeDecimal(splitCash, 0) + parseNonNegativeDecimal(splitCard, 0),
+                    shopData?.currency,
+                  )}
                 </p>
               </motion.div>
             )}
@@ -680,17 +705,16 @@ export function Sales() {
                 Скидка ({getCurrencySymbol(shopData?.currency)})
               </p>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 placeholder="0"
-                min="0"
-                max={subtotal}
-                step="0.01"
                 value={discount}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  const numVal = val === '' ? 0 : parseFloat(val) || 0;
-                  if (numVal <= subtotal && numVal >= 0) {
-                    setDiscount(val);
+                  const next = filterNonNegativeDecimalInput(e.target.value);
+                  const numVal = parseNonNegativeDecimal(next, 0);
+                  if (next === '' || (numVal <= subtotal && numVal >= 0)) {
+                    setDiscount(next);
                     setError('');
                   } else if (numVal > subtotal) {
                     setError(`Скидка не может быть больше ${subtotal}`);
@@ -710,18 +734,14 @@ export function Sales() {
                 Доставка ({getCurrencySymbol(shopData?.currency)})
               </p>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
                 placeholder="0"
-                min="0"
-                step="0.01"
                 value={delivery}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  const numVal = val === '' ? 0 : parseFloat(val) || 0;
-                  if (numVal >= 0) {
-                    setDelivery(val);
-                    setError('');
-                  }
+                  setDelivery(filterNonNegativeDecimalInput(e.target.value));
+                  setError('');
                 }}
                 className="w-full py-3 px-4 rounded-[14px] bg-muted border border-border text-sm font-mono-nums placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
@@ -803,12 +823,20 @@ function CatalogView({
   const items = () => {
     if (currentLevel === 0) return inventory?.categories || [];
     if (currentLevel === 1) return inventory?.brands.filter((b) => b.categoryId === path[0].id) || [];
-    if (currentLevel === 2) return inventory?.productFormats.filter((f) => f.brandId === path[1].id) || [];
+    if (currentLevel === 2) {
+      return (
+        inventory?.productFormats.filter(
+          (f) => f.brandId === path[1].id && f.isActive !== false
+        ) || []
+      );
+    }
     if (currentLevel === 3) {
       return (
         inventory?.flavors.filter(
           (f) =>
-            f.productFormatId === path[2].id && flavorAvailableQuantity(f) > 0
+            f.isActive !== false &&
+            f.productFormatId === path[2].id &&
+            flavorAvailableQuantity(f) > 0
         ) || []
       );
     }

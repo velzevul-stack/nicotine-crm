@@ -3,11 +3,14 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { ScreenHelpDialog } from '@/components/ScreenHelpDialog';
+import { HELP_DEBTS } from '@/lib/screen-help-content';
 import { ChevronRight, DollarSign, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { parsePositiveMoneyInput } from '@/lib/parse-money-input';
+import { filterNonNegativeDecimalInput } from '@/lib/numeric-input';
 import { useToast } from '@/hooks/use-toast';
 import { useHintSeen } from '@/hooks/use-hint-seen';
 import {
@@ -86,6 +89,7 @@ export function Debts() {
       <ScreenHeader
         title="Долги"
         subtitle={`${debts.length} должников • ${formatCurrency(totalDebt, shopData?.currency)}`}
+        actions={<ScreenHelpDialog help={HELP_DEBTS} />}
       />
 
       <div className="px-4 space-y-3 pb-4">
@@ -233,7 +237,7 @@ export function Debts() {
                 inputMode="decimal"
                 placeholder={`Сумма (${getCurrencySymbol(shopData?.currency)})`}
                 value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
+                onChange={(e) => setPaymentAmount(filterNonNegativeDecimalInput(e.target.value))}
                 className="flex-1 h-10 px-4 rounded-xl bg-secondary border border-border text-sm font-mono-nums"
               />
               <button

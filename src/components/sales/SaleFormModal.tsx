@@ -21,6 +21,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
+import { filterNonNegativeDecimalInput, parseNonNegativeDecimal } from '@/lib/numeric-input';
 import { useToast } from '@/hooks/use-toast';
 import { DateTimePicker } from '@/components/ui/datetime-picker';
 import { flavorAvailableQuantity } from '@/lib/flavor-available-qty';
@@ -237,8 +238,8 @@ export function SaleFormModal({
   };
 
   const subtotal = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
-  const discountAmount = Math.min(parseFloat(discount) || 0, subtotal);
-  const deliveryAmount = Math.max(0, delivery ? parseFloat(delivery) || 0 : 0);
+  const discountAmount = Math.min(parseNonNegativeDecimal(discount, 0), subtotal);
+  const deliveryAmount = Math.max(0, parseNonNegativeDecimal(delivery, 0));
   const total = Math.max(0, subtotal - discountAmount + deliveryAmount);
 
   const createSale = useMutation({
@@ -520,11 +521,12 @@ export function SaleFormModal({
               Скидка ({getCurrencySymbol(shopData?.currency)})
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               placeholder="0"
-              min="0"
               value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
+              onChange={(e) => setDiscount(filterNonNegativeDecimalInput(e.target.value))}
               className="w-full py-2.5 px-3 rounded-xl bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm font-mono placeholder:text-[#9CA3AF] focus:outline-none focus:ring-1 focus:ring-[#BFE7E5]/50"
             />
           </div>
@@ -534,12 +536,12 @@ export function SaleFormModal({
               Доставка ({getCurrencySymbol(shopData?.currency)})
             </label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               placeholder="0"
-              min="0"
-              step="0.01"
               value={delivery}
-              onChange={(e) => setDelivery(e.target.value)}
+              onChange={(e) => setDelivery(filterNonNegativeDecimalInput(e.target.value))}
               className="w-full py-2.5 px-3 rounded-xl bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm font-mono placeholder:text-[#9CA3AF] focus:outline-none focus:ring-1 focus:ring-[#BFE7E5]/50"
             />
           </div>

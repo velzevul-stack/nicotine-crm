@@ -14,6 +14,16 @@ import { useToast } from '@/hooks/use-toast';
 import { ScanModal } from './ScanModal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { motion, AnimatePresence } from 'framer-motion';
+import { filterStrengthNumericInput } from '@/lib/inventory-input-filters';
+import {
+  filterNonNegativeDecimalInput,
+  filterDigitsOnly,
+  parseNonNegativeDecimal,
+  parsePositiveInt,
+} from '@/lib/numeric-input';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import type { CameraPermissionUiState } from '@/lib/camera-permission';
+import { watchCameraPermission } from '@/lib/camera-permission';
 
 interface ReceiveModalProps {
   open: boolean;
@@ -33,6 +43,18 @@ interface ReceiveItem {
   formatUnitPrice?: number;
   customCostPrice?: number;
 }
+
+/** Крупный блок «только что» + до двух предыдущих строк в сессии сканирования. */
+type ScanSessionHighlight = {
+  id: string;
+  flavorId: string;
+  lineTitle: string;
+  lineSub: string;
+  deltaThisScan: number;
+  sessionQty: number;
+};
+
+type ScanSessionUi = { current: ScanSessionHighlight | null; prior: ScanSessionHighlight[] };
 
 // Функция проверки похожести строк
 function areSimilar(str1: string, str2: string): boolean {
@@ -125,6 +147,9 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
   const [scanInput, setScanInput] = useState('');
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [showScanCamera, setShowScanCamera] = useState(false);
+  const [scanSession, setScanSession] = useState<ScanSessionUi>({ current: null, prior: [] });
+  const [receiveDetailsOpen, setReceiveDetailsOpen] = useState(false);
+  const [cameraPermission, setCameraPermission] = useState<CameraPermissionUiState>('unknown');
   const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
   const [isReceiving, setIsReceiving] = useState(false);
   
@@ -180,8 +205,30 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
   useEffect(() => {
     if (!open || !initialBarcode) return;
     setActiveTab('scan');
-    processBarcode(initialBarcode);
+    processBarcode(initialBarcode, { silent: true });
   }, [open, initialBarcode]);
+
+  useEffect(() => {
+    if (!open) {
+      setScanSession({ current: null, prior: [] });
+    }
+  }, [open]);
+
+  /** Без getUserMedia: только Permissions API (Chromium), чтобы не дублировать запрос вместе со сканером. */
+  useEffect(() => {
+    if (!open || activeTab !== 'scan') return;
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void watchCameraPermission((s) => {
+      if (!cancelled) setCameraPermission(s);
+    }).then((u) => {
+      if (!cancelled) unsub = u;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [open, activeTab]);
 
   // Auto-process barcode when input changes (for scanner input)
   useEffect(() => {
@@ -214,7 +261,7 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
     }
   };
 
-  const processBarcode = (code: string) => {
+  const processBarcode = (code: string, opts?: { silent?: boolean }) => {
     const normalizedCode = normalizeBarcode(code);
     if (!normalizedCode) return;
 
@@ -232,22 +279,24 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
       setScanInput('');
       setNotFoundBarcode(null);
       pendingBarcodeRef.current = null;
-      toast({ 
-        title: "Товар принят", 
-        description: `${foundByBarcode.name} (+1)`,
-        duration: 2000
-      });
+      if (!opts?.silent) {
+        toast({
+          title: 'Товар принят',
+          description: `${foundByBarcode.name} (+1)`,
+          duration: 2000,
+        });
+      }
       setTimeout(() => inputRef.current?.focus(), 100);
       return;
     }
 
     setNotFoundBarcode(normalizedCode);
     setScanInput('');
-    toast({ 
-      title: "Товар не найден", 
+    toast({
+      title: 'Товар не найден',
       description: `Штрихкод: ${normalizedCode}`,
-      variant: "destructive",
-      duration: 3000
+      variant: 'destructive',
+      duration: 3000,
     });
     setTimeout(() => inputRef.current?.focus(), 100);
   };
@@ -262,22 +311,44 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
     
     const format = productFormats.find((pf: any) => pf.id === flavor.productFormatId);
     const brand = brands.find((b: any) => b.id === format?.brandId);
+    const lineTitle = [brand?.emojiPrefix, brand?.name, format?.name].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    const lineSub = (flavor.name || '').trim();
 
-    setReceiveItems(prev => {
-      const existing = prev.find(i => i.flavorId === flavorId);
-      if (existing) {
-        return prev.map(i => i.flavorId === flavorId ? { ...i, addQty: i.addQty + 1 } : i);
-      }
-      return [...prev, {
+    setReceiveItems((prev) => {
+      const existing = prev.find((i) => i.flavorId === flavorId);
+      const next =
+        existing != null
+          ? prev.map((i) => (i.flavorId === flavorId ? { ...i, addQty: i.addQty + 1 } : i))
+          : [
+              ...prev,
+              {
+                flavorId,
+                name: flavor.name,
+                formatName: format?.name || '',
+                brandEmoji: brand?.emojiPrefix || '',
+                currentQty: flavor.quantity,
+                addQty: 1,
+                formatStrengthLabel: format?.strengthLabel || '',
+                formatUnitPrice: format?.unitPrice || 0,
+              },
+            ];
+      const row = next.find((i) => i.flavorId === flavorId);
+      const sessionQty = row?.addQty ?? 1;
+      const highlight: ScanSessionHighlight = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         flavorId,
-        name: flavor.name,
-        formatName: format?.name || '',
-        brandEmoji: brand?.emojiPrefix || '',
-        currentQty: flavor.quantity,
-        addQty: 1,
-        formatStrengthLabel: format?.strengthLabel || '',
-        formatUnitPrice: format?.unitPrice || 0
-      }];
+        lineTitle: lineTitle || lineSub || 'Товар',
+        lineSub: lineTitle ? lineSub : '',
+        deltaThisScan: 1,
+        sessionQty,
+      };
+      queueMicrotask(() => {
+        setScanSession((s) => ({
+          current: highlight,
+          prior: s.current ? [s.current, ...s.prior].slice(0, 2) : s.prior,
+        }));
+      });
+      return next;
     });
   };
 
@@ -339,14 +410,14 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
       
       const totalQty = receiveItems.reduce((s, i) => s + i.addQty, 0);
       setReceiveItems([]);
+      setScanSession({ current: null, prior: [] });
       setNotFoundBarcode(null);
-      onOpenChange(false);
-      
-      // Показываем общее сообщение и детали для каждого товара
-      toast({ 
-        title: "Товары приняты на склад", 
+      // Окно приёма остаётся открытым для серии приёмок (ТЗ R-01)
+
+      toast({
+        title: 'Товары приняты на склад',
         description: `Принято ${totalQty} единиц. ${itemsDetails.join('. ')}`,
-        duration: 5000,
+        duration: 2000,
       });
     } catch (e) {
       toast({ title: "Ошибка", variant: "destructive" });
@@ -422,180 +493,305 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
               </TabsList>
             </div>
 
-            <TabsContent value="scan" className="flex-1 flex flex-col overflow-hidden mt-0 p-0">
-              <div className="p-4 space-y-4">
-                <form onSubmit={handleScanSubmit} className="relative flex gap-2">
-                  <div className="relative flex-1">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input 
-                      ref={inputRef}
-                      value={scanInput}
-                      onChange={(e) => setScanInput(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Сканируйте штрихкод..."
-                      className="pl-9"
-                      autoComplete="off"
-                    />
-                  </div>
+            <TabsContent value="scan" className="flex-1 flex min-h-0 flex-col overflow-hidden mt-0 p-0">
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-2 pt-3">
+                  <form onSubmit={handleScanSubmit} className="relative flex gap-2">
+                    <div className="relative flex-1">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        ref={inputRef}
+                        value={scanInput}
+                        onChange={(e) => setScanInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="USB-сканер или ввод…"
+                        className="pl-9 rounded-[12px]"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </form>
+
+                  {cameraPermission === 'denied' && (
+                    <p className="rounded-lg border border-destructive/25 bg-destructive/10 p-2.5 text-xs leading-snug text-destructive">
+                      Камера для этого сайта отключена. В Chrome / Edge: значок замка слева от адреса → разрешения сайта → Камера → «Разрешить». В Safari: «АА» → Настройки для сайта → Камера. Затем снова нажмите «Сканировать».
+                    </p>
+                  )}
+                  {cameraPermission === 'prompt' && (
+                    <p className="rounded-lg border border-border bg-muted/30 p-2.5 text-xs leading-snug text-muted-foreground">
+                      Первый раз при «Сканировать» браузер покажет один системный запрос к камере для этого адреса. Дальше, пока вы не сбросите разрешение, запрос не повторяется (так устроены Chrome, Firefox, Edge; в Safari поведение может отличаться).
+                    </p>
+                  )}
+                  {cameraPermission === 'granted' && (
+                    <p className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-2.5 text-xs leading-snug text-foreground">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={2} />
+                      <span>
+                        Камера для этого сайта уже разрешена — откроется сразу, без повторного системного запроса.
+                      </span>
+                    </p>
+                  )}
+                  {cameraPermission === 'unknown' && (
+                    <p className="rounded-lg border border-border/60 bg-muted/20 p-2.5 text-xs leading-snug text-muted-foreground">
+                      Запрос к камере только при нажатии «Сканировать». Откройте приложение по <strong className="text-foreground">HTTPS</strong> с постоянным доменом — тогда браузер запомнит выбор и не будет спрашивать при каждом визите.
+                    </p>
+                  )}
+
                   <Button
                     type="button"
                     variant="outline"
-                    size="icon"
-                    onClick={() => setShowScanCamera(true)}
-                    aria-label="Камера для сканирования штрихкода"
+                    onClick={() => {
+                      setNewBarcode('');
+                      setShowCreateForm(true);
+                    }}
+                    className="w-full rounded-[12px]"
                   >
-                    <ScanLine size={18} />
+                    <Plus size={16} className="mr-2" />
+                    Добавить новый товар
                   </Button>
-                </form>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setNewBarcode('');
-                    setShowCreateForm(true);
-                  }}
-                  className="w-full"
-                >
-                  <Plus size={16} className="mr-2" />
-                  Добавить новый товар
-                </Button>
+                  {notFoundBarcode && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-xl border border-destructive/20 bg-destructive/10 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+                        <div className="flex-1">
+                          <p className="mb-1 text-sm font-medium text-destructive">Товар не найден</p>
+                          <p className="mb-3 text-xs text-muted-foreground">Штрихкод: {notFoundBarcode}</p>
+                          <Button size="sm" variant="outline" onClick={handleCreateFromNotFound} className="w-full">
+                            <Plus size={14} className="mr-2" />
+                            Добавить товар на склад
+                          </Button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
 
-                {notFoundBarcode && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl"
-                  >
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-destructive mb-1">Товар не найден</p>
-                        <p className="text-xs text-muted-foreground mb-3">Штрихкод: {notFoundBarcode}</p>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          onClick={handleCreateFromNotFound}
-                          className="w-full"
+                  {searchResults && searchResults.length > 0 && !notFoundBarcode && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="overflow-hidden rounded-xl border bg-background"
+                    >
+                      {searchResults.map((f: any) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => {
+                            addItemToReceive(f.id);
+                            setScanInput('');
+                          }}
+                          className="flex w-full items-center justify-between border-b p-2 text-left last:border-0 hover:bg-secondary"
                         >
-                          <Plus size={14} className="mr-2" />
-                          Добавить товар на склад
-                        </Button>
+                          <span className="text-sm">{f.name}</span>
+                          <Plus size={14} />
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+
+                  {scanSession.current ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-[20px] border border-primary/35 bg-primary/10 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-primary/90">Сейчас</p>
+                          <p className="mt-1 text-lg font-semibold leading-snug text-foreground">
+                            {scanSession.current.lineTitle}
+                          </p>
+                          {scanSession.current.lineSub ? (
+                            <p className="mt-0.5 text-sm text-muted-foreground">{scanSession.current.lineSub}</p>
+                          ) : null}
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            В этой приёмке:{' '}
+                            <span className="font-semibold text-foreground">
+                              {receiveItems.find((r) => r.flavorId === scanSession.current!.flavorId)?.addQty ??
+                                scanSession.current.sessionQty}{' '}
+                              шт
+                            </span>
+                          </p>
+                        </div>
+                        <div className="shrink-0 rounded-2xl bg-primary/20 px-3 py-2 text-center">
+                          <p className="text-2xl font-bold leading-none text-primary">+{scanSession.current.deltaThisScan}</p>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">за скан</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="rounded-[16px] border border-dashed border-border/60 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+                      Нажмите «Сканировать» внизу или введите код / USB-сканером
+                    </div>
+                  )}
+
+                  {scanSession.prior.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Ранее в этой сессии</p>
+                      <div className="space-y-2">
+                        {scanSession.prior.map((h) => {
+                          const row = receiveItems.find((r) => r.flavorId === h.flavorId);
+                          const qty = row?.addQty;
+                          return (
+                            <div
+                              key={h.id}
+                              className="flex items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-foreground">{h.lineTitle}</p>
+                                {h.lineSub ? (
+                                  <p className="truncate text-xs text-muted-foreground">{h.lineSub}</p>
+                                ) : null}
+                              </div>
+                              {qty != null ? (
+                                <span className="shrink-0 rounded-lg bg-background/80 px-2 py-0.5 text-xs font-semibold tabular-nums">
+                                  {qty} шт
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  </motion.div>
-                )}
-
-                {searchResults && searchResults.length > 0 && !notFoundBarcode && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="border rounded-xl overflow-hidden bg-background"
-                  >
-                    {searchResults.map((f: any) => (
-                      <button
-                        key={f.id}
-                        onClick={() => { addItemToReceive(f.id); setScanInput(''); }}
-                        className="w-full text-left p-2 hover:bg-secondary flex justify-between items-center border-b last:border-0"
-                      >
-                        <span className="text-sm">{f.name}</span>
-                        <Plus size={14} />
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-
-                <div className="flex-1 overflow-y-auto space-y-2 min-h-[200px] max-h-[40vh]">
-                  {receiveItems.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground text-sm">
-                      {notFoundBarcode 
-                        ? 'Сканируйте следующий товар или добавьте не найденный'
-                        : 'Сканируйте товары или выберите из каталога'}
-                    </div>
-                  ) : (
-                    receiveItems.map((item) => {
-                      const lineLabel = `${item.brandEmoji} ${item.formatName} ${item.name}`.replace(/\s+/g, ' ').trim();
-                      const curSym = getCurrencySymbol(shopData?.currency);
-                      const previewText = `${item.brandEmoji}${item.formatName}${item.formatStrengthLabel ? ' ' + item.formatStrengthLabel : ''}${item.brandEmoji}: (${item.formatUnitPrice || 0} ${curSym})\n• ${item.name}`;
-                      
-                      return (
-                        <motion.div
-                          key={item.flavorId}
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="space-y-2"
-                        >
-                          <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/50 border border-success/20">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{item.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {item.brandEmoji} {item.formatName}
-                              </p>
-                              {receiveItems.length === 1 && (
-                                <div className="mt-2">
-                                  <label className="text-[10px] text-muted-foreground">Закупка ({curSym})</label>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    placeholder="Опционально"
-                                    value={item.customCostPrice ?? ''}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      setReceiveItems((prev) =>
-                                        prev.map((i) => {
-                                          if (i.flavorId !== item.flavorId) return i;
-                                          if (v === '') return { ...i, customCostPrice: undefined };
-                                          const n = parseFloat(v);
-                                          if (!Number.isFinite(n)) return { ...i, customCostPrice: undefined };
-                                          return { ...i, customCostPrice: Math.max(0, n) };
-                                        })
-                                      );
-                                    }}
-                                    className="mt-0.5 w-24 h-7 px-2 rounded text-xs bg-background border border-border"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-10 w-10"
-                                aria-label={`Уменьшить количество: ${lineLabel}`}
-                                onClick={() => setReceiveItems(prev => prev.map(i => i.flavorId === item.flavorId ? { ...i, addQty: Math.max(1, i.addQty - 1) } : i))}
-                              >
-                                <Minus size={12} />
-                              </Button>
-                              <span className="text-sm font-mono-nums w-8 text-center font-semibold text-success">{item.addQty}</span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-10 w-10"
-                                aria-label={`Увеличить количество: ${lineLabel}`}
-                                onClick={() => setReceiveItems(prev => prev.map(i => i.flavorId === item.flavorId ? { ...i, addQty: i.addQty + 1 } : i))}
-                              >
-                                <Plus size={12} />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-10 w-10 text-destructive"
-                                aria-label={`Удалить из приёмки: ${lineLabel}`}
-                                onClick={() => setReceiveItems(prev => prev.filter(i => i.flavorId !== item.flavorId))}
-                              >
-                                <X size={12} />
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="p-2 rounded-lg bg-muted/50 border border-border/50">
-                            <p className="text-xs text-muted-foreground mb-1">Предпросмотр поста:</p>
-                            <pre className="text-xs whitespace-pre-wrap font-mono">{previewText}</pre>
-                          </div>
-                        </motion.div>
-                      );
-                    })
                   )}
+
+                  <Collapsible open={receiveDetailsOpen} onOpenChange={setReceiveDetailsOpen}>
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between rounded-xl border border-border bg-secondary/40 px-3 py-2.5 text-left text-sm font-medium"
+                      >
+                        <span>
+                          Все позиции в приёмке
+                          {receiveItems.length > 0 ? (
+                            <span className="ml-2 text-muted-foreground">({receiveItems.length})</span>
+                          ) : null}
+                        </span>
+                        <ChevronDown
+                          className={`h-4 w-4 shrink-0 transition-transform ${receiveDetailsOpen ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-2 pt-2">
+                      {receiveItems.length === 0 ? (
+                        <p className="py-4 text-center text-xs text-muted-foreground">Пока пусто</p>
+                      ) : (
+                        receiveItems.map((item) => {
+                          const lineLabel = `${item.brandEmoji} ${item.formatName} ${item.name}`.replace(/\s+/g, ' ').trim();
+                          const curSym = getCurrencySymbol(shopData?.currency);
+                          const previewText = `${item.brandEmoji}${item.formatName}${
+                            item.formatStrengthLabel ? ' ' + item.formatStrengthLabel : ''
+                          } (${item.formatUnitPrice || 0} ${curSym})\n• ${item.name}`;
+
+                          return (
+                            <motion.div
+                              key={item.flavorId}
+                              initial={{ opacity: 0, scale: 0.98 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="space-y-2"
+                            >
+                              <div className="flex items-center justify-between rounded-lg border border-success/20 bg-secondary/50 p-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium">{item.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.brandEmoji} {item.formatName}
+                                  </p>
+                                  {receiveItems.length === 1 && (
+                                    <div className="mt-2">
+                                      <label className="text-[10px] text-muted-foreground">Закупка ({curSym})</label>
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        autoComplete="off"
+                                        placeholder="Опционально"
+                                        value={item.customCostPrice ?? ''}
+                                        onChange={(e) => {
+                                          const v = filterNonNegativeDecimalInput(e.target.value);
+                                          setReceiveItems((prev) =>
+                                            prev.map((i) => {
+                                              if (i.flavorId !== item.flavorId) return i;
+                                              if (v === '') return { ...i, customCostPrice: undefined };
+                                              const n = parseFloat(v);
+                                              if (!Number.isFinite(n)) return { ...i, customCostPrice: undefined };
+                                              return { ...i, customCostPrice: Math.max(0, n) };
+                                            }),
+                                          );
+                                        }}
+                                        className="mt-0.5 h-7 w-24 rounded border border-border bg-background px-2 text-xs"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-10 w-10"
+                                    aria-label={`Уменьшить количество: ${lineLabel}`}
+                                    onClick={() =>
+                                      setReceiveItems((prev) =>
+                                        prev.map((i) =>
+                                          i.flavorId === item.flavorId
+                                            ? { ...i, addQty: Math.max(1, i.addQty - 1) }
+                                            : i,
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    <Minus size={12} />
+                                  </Button>
+                                  <span className="w-8 text-center text-sm font-semibold text-success">{item.addQty}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-10 w-10"
+                                    aria-label={`Увеличить количество: ${lineLabel}`}
+                                    onClick={() =>
+                                      setReceiveItems((prev) =>
+                                        prev.map((i) =>
+                                          i.flavorId === item.flavorId ? { ...i, addQty: i.addQty + 1 } : i,
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    <Plus size={12} />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-10 w-10 text-destructive"
+                                    aria-label={`Удалить из приёмки: ${lineLabel}`}
+                                    onClick={() =>
+                                      setReceiveItems((prev) => prev.filter((i) => i.flavorId !== item.flavorId))
+                                    }
+                                  >
+                                    <X size={12} />
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="rounded-lg border border-border/50 bg-muted/50 p-2">
+                                <p className="mb-1 text-xs text-muted-foreground">Предпросмотр поста</p>
+                                <pre className="whitespace-pre-wrap font-mono text-xs">{previewText}</pre>
+                              </div>
+                            </motion.div>
+                          );
+                        })
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+
+                <div className="shrink-0 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                  <Button
+                    type="button"
+                    className="h-14 w-full rounded-[18px] text-base font-semibold shadow-lg gradient-primary"
+                    onClick={() => setShowScanCamera(true)}
+                  >
+                    <ScanLine size={22} className="mr-2 shrink-0" />
+                    Сканировать
+                  </Button>
                 </div>
               </div>
             </TabsContent>
@@ -633,17 +829,18 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
         </DialogContent>
       </Dialog>
 
-      <ScanModal 
-        open={showScanCamera} 
+      <ScanModal
+        open={showScanCamera}
+        closeOnScan
         onOpenChange={(isOpen) => {
           setShowScanCamera(isOpen);
           if (!isOpen) {
             setTimeout(() => inputRef.current?.focus(), 100);
           }
         }}
-        onScan={(code) => { 
-          processBarcode(code);
-        }} 
+        onScan={(code) => {
+          processBarcode(code, { silent: true });
+        }}
       />
     </>
   );
@@ -743,11 +940,11 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
     strengthLabel: '', // Жидкости/снюс: мг; кастомные поля strength_label
     ohmValue: '', // Расходники: номинал Ом
     consumablePackQty: '', // Расходники: опционально — доп. текст к позиции (вкус/подпись)
-    piecesPerPack: 1,
+    piecesPerPack: '1',
     flavorName: '',
-    costPrice: 0, // Для расходников сюда пишем цену за штуку (рассчитываем из стоимости упаковки)
-    packCost: 0,
-    unitPrice: 0,
+    costPrice: '' as number | string,
+    packCost: '' as number | string,
+    unitPrice: '' as number | string,
     quantity: 1,
     customValues: {} as Record<string, any>
   });
@@ -767,6 +964,11 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
       return areSimilar(normalizeEntityName(b.name), normalizeEntityName(formData.brandName));
     });
   }, [formData.brandName, formData.categoryId, brands]);
+
+  const brandsInCategory = useMemo(
+    () => brands.filter((b: any) => b.categoryId === formData.categoryId),
+    [brands, formData.categoryId],
+  );
 
   const selectedCategory = categories.find((c: any) => c.id === formData.categoryId);
   const isLiquidCategory = selectedCategory?.name?.toLowerCase().includes('жидкост') || 
@@ -897,11 +1099,9 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
           : parseFloat(formData.packCost) || 0
         : formData.packCost;
     const piecesPerPackValue =
-      typeof formData.piecesPerPack === 'string'
-        ? formData.piecesPerPack === ''
-          ? 0
-          : parseInt(formData.piecesPerPack, 10) || 0
-        : formData.piecesPerPack;
+      typeof formData.piecesPerPack === 'number'
+        ? formData.piecesPerPack
+        : parsePositiveInt(String(formData.piecesPerPack ?? ''), 0);
     const effectiveCostPrice =
       isConsumableCategory && packCostValue > 0 && piecesPerPackValue > 0
         ? packCostValue / piecesPerPackValue
@@ -1191,7 +1391,10 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
   return (
     <>
     <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0 flex flex-col">
+      <DialogContent
+        className="glass-card border-border max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0 flex flex-col"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader className="p-4 pb-2">
           <DialogTitle>Новый товар</DialogTitle>
         </DialogHeader>
@@ -1205,7 +1408,8 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 className="flex-1"
                 value={formData.barcode}
                 onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                placeholder="Оставьте пустым, если нет штрихкода"
+                placeholder="Штрихкод (необяз.)"
+                title="Оставьте пустым, если штрихкода нет — тогда товар без штрихкода"
                 autoComplete="off"
               />
               <Button
@@ -1218,6 +1422,9 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 <ScanLine size={18} />
               </Button>
             </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Если штрихкода нет — не заполняйте поле; товар будет без штрихкода.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -1264,6 +1471,8 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                     strengthLabel: '',
                     ohmValue: '',
                     consumablePackQty: '',
+                    piecesPerPack: '1',
+                    packCost: '',
                     flavorName: '',
                     customValues: {},
                   });
@@ -1327,6 +1536,22 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                     </div>
                   )}
                 </>
+              ) : brandsInCategory.length === 0 ? (
+                <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  <p>В этой категории ещё нет брендов — создайте линейку вручную.</p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-[10px]"
+                    onClick={() => {
+                      setIsNewBrand(true);
+                      setFormData({ ...formData, brandId: '', brandName: '', brandEmoji: '' });
+                    }}
+                  >
+                    Создать новый бренд
+                  </Button>
+                </div>
               ) : (
                 <Select
                   value={formData.brandId || undefined}
@@ -1339,7 +1564,12 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                       brandEmoji: '',
                       ohmValue: '',
                       consumablePackQty: '',
-                      unitPrice: selectedFormat ? selectedFormat.unitPrice : formData.unitPrice,
+                      piecesPerPack: '1',
+                      packCost: '',
+                      unitPrice:
+                        selectedFormat && (selectedFormat.unitPrice ?? 0) !== 0
+                          ? String(selectedFormat.unitPrice)
+                          : formData.unitPrice,
                       customValues: {},
                     });
                   }}
@@ -1348,13 +1578,11 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                     <SelectValue placeholder="Выберите бренд" />
                   </SelectTrigger>
                   <SelectContent className="z-[100]">
-                    {brands
-                      .filter((b: any) => b.categoryId === formData.categoryId)
-                      .map((b: any) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.emojiPrefix} {b.name}
-                        </SelectItem>
-                      ))}
+                    {brandsInCategory.map((b: any) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.emojiPrefix} {b.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
@@ -1432,7 +1660,10 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                         if (field.target === 'flavor_name') {
                           setFormData({...formData, flavorName: val});
                         } else if (field.target === 'strength_label') {
-                          setFormData({...formData, strengthLabel: val});
+                          setFormData({
+                            ...formData,
+                            strengthLabel: filterStrengthNumericInput(val),
+                          });
                         } else {
                           setFormData({
                             ...formData,
@@ -1458,8 +1689,14 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 <div className="space-y-2">
                   <Label>Крепость (мг)</Label>
                   <Input
+                    inputMode="decimal"
                     value={formData.strengthLabel}
-                    onChange={e => setFormData({...formData, strengthLabel: e.target.value})}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        strengthLabel: filterStrengthNumericInput(e.target.value),
+                      })
+                    }
                     placeholder="50"
                     required={isNewBrand}
                   />
@@ -1474,8 +1711,14 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 <div className="space-y-2">
                   <Label>Крепость (мг)</Label>
                   <Input
+                    inputMode="decimal"
                     value={formData.strengthLabel}
-                    onChange={e => setFormData({...formData, strengthLabel: e.target.value})}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        strengthLabel: filterStrengthNumericInput(e.target.value),
+                      })
+                    }
                     placeholder="50"
                     required
                   />
@@ -1558,25 +1801,16 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
             </>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Себестоимость</Label>
-              <Input 
-                type="number" 
-                step="0.01"
-                min={0}
-                value={formData.costPrice || ''} 
-                onChange={e => {
-                  const val = e.target.value;
-                  if (val === '') {
-                    setFormData({ ...formData, costPrice: 0 });
-                    return;
-                  }
-                  const n = parseFloat(val);
-                  setFormData({
-                    ...formData,
-                    costPrice: Number.isFinite(n) ? Math.max(0, n) : 0,
-                  });
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:order-1">
+              <Label>Себестоимость ({getCurrencySymbol(shopData?.currency)})</Label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={formData.costPrice === '' ? '' : String(formData.costPrice)}
+                onChange={(e) => {
+                  setFormData({ ...formData, costPrice: filterNonNegativeDecimalInput(e.target.value) });
                 }}
                 onFocus={(e) => {
                   if (e.target.value === '0') {
@@ -1586,15 +1820,15 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 placeholder="0"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:order-2">
               <Label>Цена продажи ({getCurrencySymbol(shopData?.currency)})</Label>
-              <Input 
-                type="number" 
-                step="0.01"
-                value={formData.unitPrice || ''} 
-                onChange={e => {
-                  const val = e.target.value;
-                  setFormData({...formData, unitPrice: val === '' ? 0 : parseFloat(val) || 0});
+              <Input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={formData.unitPrice === '' ? '' : String(formData.unitPrice)}
+                onChange={(e) => {
+                  setFormData({ ...formData, unitPrice: filterNonNegativeDecimalInput(e.target.value) });
                 }}
                 onFocus={(e) => {
                   if (e.target.value === '0') {
@@ -1605,6 +1839,9 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
                 required
               />
             </div>
+            <p className="text-[10px] text-muted-foreground leading-snug sm:col-span-2 sm:order-3">
+              Сначала себестоимость за вкус, затем розничная цена линейки (общая для всех вкусов этой линейки) — как в окне редактирования товара.
+            </p>
           </div>
 
           {isConsumableCategory && (
@@ -1612,13 +1849,12 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
               <div className="space-y-2">
                 <Label>Стоимость упаковки</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={formData.packCost || ''}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={formData.packCost === '' ? '' : String(formData.packCost)}
                   onChange={(e) => {
-                    const val = e.target.value;
-                    setFormData({ ...formData, packCost: val === '' ? 0 : parseFloat(val) || 0 });
+                    setFormData({ ...formData, packCost: filterNonNegativeDecimalInput(e.target.value) });
                   }}
                   placeholder="0"
                 />
@@ -1626,23 +1862,32 @@ function CreateItemForm({ barcode, onClose, onSuccess, inventory, onOpenCategory
               <div className="space-y-2">
                 <Label>Штук в упаковке</Label>
                 <Input
-                  type="number"
-                  step="1"
-                  min={1}
-                  value={formData.piecesPerPack || ''}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={formData.piecesPerPack === '' || formData.piecesPerPack == null ? '' : String(formData.piecesPerPack)}
                   onChange={(e) => {
-                    const val = e.target.value;
-                    setFormData({ ...formData, piecesPerPack: val === '' ? 1 : Math.max(1, parseInt(val, 10) || 1) });
+                    const next = filterDigitsOnly(e.target.value);
+                    setFormData({ ...formData, piecesPerPack: next });
                   }}
                   placeholder="1"
                 />
               </div>
               <div className="col-span-2 text-xs text-muted-foreground">
-                Себестоимость за штуку: {
-                  (formData.packCost && formData.piecesPerPack)
-                    ? (Number(formData.packCost) / Number(formData.piecesPerPack)).toFixed(2)
-                    : Number(formData.costPrice || 0).toFixed(2)
-                } {getCurrencySymbol(shopData?.currency)}
+                Себестоимость за штуку:{' '}
+                {formData.packCost !== '' &&
+                formData.packCost != null &&
+                parseNonNegativeDecimal(String(formData.packCost), 0) > 0 &&
+                parsePositiveInt(String(formData.piecesPerPack ?? ''), 0) > 0
+                  ? (
+                      parseNonNegativeDecimal(String(formData.packCost), 0) /
+                      parsePositiveInt(String(formData.piecesPerPack), 0)
+                    ).toFixed(2)
+                  : parseNonNegativeDecimal(
+                      typeof formData.costPrice === 'string' ? formData.costPrice : String(formData.costPrice ?? ''),
+                      0,
+                    ).toFixed(2)}{' '}
+                {getCurrencySymbol(shopData?.currency)}
               </div>
             </div>
           )}

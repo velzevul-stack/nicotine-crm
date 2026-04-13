@@ -7,6 +7,8 @@ export interface InventoryFilters {
   inStockOnly: boolean;
   noBarcode: boolean;
   showReservedOnly: boolean;
+  /** Показать скрытые (неактивные вкус / линейка) */
+  includeInactive: boolean;
   selectedCategory: string | null;
   selectedStrength: string | null;
   selectedBrand: string | null;
@@ -19,6 +21,7 @@ const defaultFilters: InventoryFilters = {
   inStockOnly: false,
   noBarcode: false,
   showReservedOnly: false,
+  includeInactive: false,
   selectedCategory: null,
   selectedStrength: null,
   selectedBrand: null,
@@ -39,6 +42,7 @@ export function useInventoryFilters() {
       inStockOnly: sp.get('inStockOnly') === '1',
       noBarcode: sp.get('noBarcode') === '1',
       showReservedOnly: sp.get('showReservedOnly') === '1',
+      includeInactive: sp.get('includeInactive') === '1',
       selectedCategory: sp.get('categoryId') || null,
       selectedStrength: sp.get('strength') || null,
       selectedBrand: sp.get('brandId') || null,
@@ -64,6 +68,10 @@ export function useInventoryFilters() {
     if (updates.showReservedOnly !== undefined) {
       if (updates.showReservedOnly) params.set('showReservedOnly', '1');
       else params.delete('showReservedOnly');
+    }
+    if (updates.includeInactive !== undefined) {
+      if (updates.includeInactive) params.set('includeInactive', '1');
+      else params.delete('includeInactive');
     }
     if (updates.selectedCategory !== undefined) {
       if (updates.selectedCategory) params.set('categoryId', updates.selectedCategory);
@@ -104,6 +112,7 @@ export function useInventoryFilters() {
       filters.inStockOnly ||
       filters.noBarcode ||
       filters.showReservedOnly ||
+      filters.includeInactive ||
       filters.selectedCategory !== null ||
       filters.selectedStrength !== null ||
       filters.selectedBrand !== null ||

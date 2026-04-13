@@ -18,6 +18,8 @@ export type InventoryListFilters = {
   inStockOnly: boolean;
   noBarcode: boolean;
   showReservedOnly: boolean;
+  /** Показать позиции с выключенным вкусом или неактивной линейкой (по умолчанию скрыты). */
+  includeInactive: boolean;
   minPrice: string | null;
   maxPrice: string | null;
   categoryId: string | null;
@@ -32,6 +34,7 @@ export function parseInventoryListFilters(searchParams: URLSearchParams): Invent
     inStockOnly: searchParams.get('inStockOnly') === '1',
     noBarcode: searchParams.get('noBarcode') === '1',
     showReservedOnly: searchParams.get('showReservedOnly') === '1',
+    includeInactive: searchParams.get('includeInactive') === '1',
     minPrice: searchParams.get('minPrice'),
     maxPrice: searchParams.get('maxPrice'),
     categoryId: searchParams.get('categoryId'),
@@ -101,10 +104,13 @@ export function matchesInventoryListFilters(i: InventoryItemRow, filters: Invent
     showReservedOnly,
     inStockOnly,
     noBarcode,
+    includeInactive,
     minPrice,
     maxPrice,
     search,
   } = filters;
+
+  if (!includeInactive && (!i.flavor.isActive || !i.format.isActive)) return false;
 
   if (categoryId && i.category.id !== categoryId) return false;
   if (brandId && i.brand.id !== brandId) return false;

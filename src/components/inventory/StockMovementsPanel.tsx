@@ -209,10 +209,16 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
       ) : isError && !data ? null : movements.length === 0 ? (
         <div className="text-sm text-muted-foreground py-6 text-center">Записей нет</div>
       ) : (
-        <div className="max-h-[62vh] overflow-y-auto pr-1" onScroll={handleHistoryScroll}>
+        <div
+          className="max-h-[62vh] overflow-y-auto overscroll-contain pr-1 scroll-py-4 pb-[max(1.25rem,calc(0.75rem+env(safe-area-inset-bottom,0px)))] pt-3 [scroll-padding-bottom:1.25rem] [scroll-padding-top:0.75rem]"
+          onScroll={handleHistoryScroll}
+        >
           <div className="space-y-3 md:hidden">
             {movements.map((m) => (
-              <div key={m.id} className="rounded-xl border border-border p-3 bg-background space-y-2">
+              <div
+                key={m.id}
+                className="scroll-mt-2 rounded-xl border border-border bg-background p-3 space-y-2"
+              >
                 <div className="text-xs text-muted-foreground">{new Date(m.createdAt).toLocaleString()}</div>
                 <div className="text-sm font-medium break-words">{m.productName}</div>
                 <div className="text-xs break-words">{ACTION_LABELS[m.actionType] || m.actionType}</div>
@@ -293,18 +299,28 @@ export function StockMovementsPanel({ items }: { items: Array<{ flavor: { id: st
               </SelectContent>
             </Select>
 
-            <input
-              type="date"
-              value={draftFromDate}
-              onChange={(e) => setDraftFromDate(e.target.value)}
-              className="h-11 w-full rounded-[12px] border border-border bg-muted px-3 text-sm"
-            />
-            <input
-              type="date"
-              value={draftToDate}
-              onChange={(e) => setDraftToDate(e.target.value)}
-              className="h-11 w-full rounded-[12px] border border-border bg-muted px-3 text-sm"
-            />
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Дата с</span>
+              <input
+                id="movements-filter-from"
+                type="date"
+                value={draftFromDate}
+                onChange={(e) => setDraftFromDate(e.target.value)}
+                className="h-11 w-full rounded-[12px] border border-border bg-muted px-3 text-sm"
+                aria-label="Дата с"
+              />
+            </div>
+            <div className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">Дата по</span>
+              <input
+                id="movements-filter-to"
+                type="date"
+                value={draftToDate}
+                onChange={(e) => setDraftToDate(e.target.value)}
+                className="h-11 w-full rounded-[12px] border border-border bg-muted px-3 text-sm"
+                aria-label="Дата по"
+              />
+            </div>
 
             <Select value={String(draftLimit)} onValueChange={(v) => setDraftLimit(Number(v))}>
               <SelectTrigger className="h-11">

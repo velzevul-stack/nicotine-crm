@@ -7,6 +7,13 @@ import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { useHintSeen } from '@/hooks/use-hint-seen';
 import { Moon, Sun, Settings, MessageCircle, LogOut } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const ACCESS_KEY_STORAGE = 'telegram_access_key';
 
@@ -142,15 +149,16 @@ export function SettingsTab() {
           <label className="text-xs font-medium text-[#9CA3AF] uppercase tracking-wider mb-1 block">
             Валюта
           </label>
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            className="w-full py-3 px-4 rounded-[12px] bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm focus:outline-none focus:ring-2 focus:ring-[#BFE7E5]/30"
-          >
-            <option value="BYN">BYN - Белорусский рубль</option>
-            <option value="USD">$ - Доллар США</option>
-            <option value="RUB">₽ - Российский рубль</option>
-          </select>
+          <Select value={currency} onValueChange={setCurrency}>
+            <SelectTrigger className="h-12 w-full rounded-[12px] border border-white/10 bg-[#1B2030] px-4 text-sm text-[#F5F5F7] focus:ring-2 focus:ring-[#BFE7E5]/30 [&>svg]:text-[#9CA3AF]">
+              <SelectValue placeholder="Валюта" />
+            </SelectTrigger>
+            <SelectContent className="z-[120]">
+              <SelectItem value="BYN">BYN — белорусский рубль</SelectItem>
+              <SelectItem value="USD">USD — доллар США</SelectItem>
+              <SelectItem value="RUB">RUB — российский рубль</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>

@@ -13,7 +13,11 @@ export function AppLayout({ children }: AppLayoutProps) {
   useStatsSync();
 
   return (
-    <ViewportScrollShell maxWidth="md" mainClassName="pb-24" belowScroll={<BottomNav />}>
+    <ViewportScrollShell
+      maxWidth="md"
+      mainClassName="pb-24 [scroll-padding-bottom:calc(6.5rem+env(safe-area-inset-bottom,0px))]"
+      belowScroll={<BottomNav />}
+    >
       {children}
     </ViewportScrollShell>
   );

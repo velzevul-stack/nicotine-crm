@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { ScreenHelpDialog } from '@/components/ScreenHelpDialog';
+import { HELP_DASHBOARD } from '@/lib/screen-help-content';
 import { KPICard, CARD_COLORS } from '@/components/KPICard';
 import { KPISkeleton } from '@/components/KPISkeleton';
 import { HourlyChartCard } from '@/components/HourlyChartCard';
@@ -116,7 +118,8 @@ export function Dashboard() {
             : undefined
         }
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-start gap-1">
+            <ScreenHelpDialog help={HELP_DASHBOARD} />
             <Link
               href="/settings"
               className="p-2.5 hover:bg-muted rounded-full transition-colors"

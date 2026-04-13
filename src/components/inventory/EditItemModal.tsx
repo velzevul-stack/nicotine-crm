@@ -1,15 +1,33 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { getCurrencySymbol } from '@/lib/currency';
+import { filterNonNegativeDecimalInput } from '@/lib/numeric-input';
 import { Trash2 } from 'lucide-react';
 
 interface EditItemModalProps {
@@ -28,6 +46,7 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
   });
   const curLabel = getCurrencySymbol(shopData?.currency);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     barcode: '',
@@ -39,16 +58,23 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
 
   useEffect(() => {
     if (item) {
+      const cp = item.costPrice ?? 0;
+      const up = item.format.unitPrice ?? 0;
       setFormData({
         name: item.flavor.name,
         barcode: item.barcode || '',
-        costPrice: item.costPrice || 0,
-        unitPrice: item.format.unitPrice || 0,
+        costPrice: cp === 0 ? '' : String(cp),
+        unitPrice: up === 0 ? '' : String(up),
         isActive: item.flavor.isActive,
         customValues: item.flavor.customValues || {},
       });
+      setShowDeactivateConfirm(false);
     }
   }, [item]);
+
+  useEffect(() => {
+    if (!open) setShowDeactivateConfirm(false);
+  }, [open]);
 
   const updateMutation = useMutation({
     mutationFn: (data: typeof formData) =>
@@ -123,10 +149,24 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
       });
       return;
     }
+    const unitPrice =
+      typeof formData.unitPrice === 'string'
+        ? formData.unitPrice === ''
+          ? 0
+          : parseFloat(formData.unitPrice) || 0
+        : formData.unitPrice;
+    if (unitPrice <= 0) {
+      toast({
+        title: 'Ошибка',
+        description: 'Укажите цену продажи больше нуля',
+        variant: 'destructive',
+      });
+      return;
+    }
     const payload = {
       ...formData,
       costPrice: Math.max(0, costPrice),
-      unitPrice: typeof formData.unitPrice === 'string' ? (formData.unitPrice === '' ? 0 : parseFloat(formData.unitPrice) || 0) : formData.unitPrice,
+      unitPrice,
     };
     updateMutation.mutate(payload);
   };
@@ -135,7 +175,10 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="glass-card border-border max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Редактирование товара</DialogTitle>
         </DialogHeader>
@@ -169,40 +212,48 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
                       {field.required && <span className="text-destructive ml-1">*</span>}
                     </Label>
                     {field.type === 'select' ? (
-                      <select
-                        className="w-full h-10 rounded-md border border-border bg-secondary px-3 text-sm"
+                      <Select
                         value={
-                          field.target === 'flavor_name' ? formData.name :
-                          // field.target === 'strength_label' ? formData.strengthLabel : // We don't have strengthLabel in formData yet, need to add if we want to edit it
-                          formData.customValues?.[field.name] || ''
+                          (field.target === 'flavor_name'
+                            ? formData.name
+                            : field.target === 'strength_label'
+                              ? formData.customValues?.[field.name] || item?.format?.strengthLabel
+                              : formData.customValues?.[field.name]) || undefined
                         }
-                        onChange={e => {
-                          const val = e.target.value;
+                        onValueChange={(val) => {
                           if (field.target === 'flavor_name') {
-                            setFormData({...formData, name: val});
+                            setFormData({ ...formData, name: val });
                           } else if (field.target === 'strength_label') {
-                             // We need to handle strength label update. 
-                             // Currently EditItemModal doesn't support editing format fields (strength) easily 
-                             // because it affects all flavors in format.
-                             // But user might want to.
-                             // For now, let's just handle customValues and flavor_name.
+                            setFormData({
+                              ...formData,
+                              customValues: {
+                                ...formData.customValues,
+                                [field.name]: val,
+                              },
+                            });
                           } else {
                             setFormData({
                               ...formData,
                               customValues: {
                                 ...formData.customValues,
-                                [field.name]: val
-                              }
+                                [field.name]: val,
+                              },
                             });
                           }
                         }}
                         required={field.required}
                       >
-                        <option value="">Выберите...</option>
-                        {field.options?.map((opt: string) => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="h-10 w-full rounded-md border border-border bg-secondary px-3 text-sm">
+                          <SelectValue placeholder="Выберите..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {field.options?.map((opt: string) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <Input
                         type={field.type === 'number' ? 'number' : 'text'}
@@ -233,37 +284,17 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="price">Цена продажи ({curLabel})</Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                value={formData.unitPrice}
-                onChange={(e) => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
-              />
-              <p className="text-[10px] text-muted-foreground">Влияет на весь формат {item.format.name}</p>
-            </div>
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:order-1">
               <Label htmlFor="cost">Себестоимость ({curLabel})</Label>
               <Input
                 id="cost"
-                type="number"
-                step="0.01"
-                min={0}
-                value={formData.costPrice || ''}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={formData.costPrice === '' ? '' : String(formData.costPrice)}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '') {
-                    setFormData({ ...formData, costPrice: '' });
-                    return;
-                  }
-                  const n = parseFloat(val);
-                  setFormData({
-                    ...formData,
-                    costPrice: Number.isFinite(n) ? Math.max(0, n) : '',
-                  });
+                  setFormData({ ...formData, costPrice: filterNonNegativeDecimalInput(e.target.value) });
                 }}
                 onFocus={(e) => {
                   if (e.target.value === '0') {
@@ -273,6 +304,28 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
                 placeholder="0"
               />
             </div>
+            <div className="space-y-2 sm:order-2">
+              <Label htmlFor="price">Цена продажи ({curLabel})</Label>
+              <Input
+                id="price"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={formData.unitPrice === '' ? '' : String(formData.unitPrice)}
+                onChange={(e) => {
+                  setFormData({ ...formData, unitPrice: filterNonNegativeDecimalInput(e.target.value) });
+                }}
+                onFocus={(e) => {
+                  if (e.target.value === '0') {
+                    e.target.select();
+                  }
+                }}
+                placeholder="0"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground leading-snug sm:col-span-2 sm:order-3">
+              Цена продажи — общая для линейки «{item.brand?.name ?? ''} {item.format.name}» (все вкусы этой линейки). Себестоимость — за этот вкус.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -297,9 +350,18 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
             <Switch
               id="active"
               checked={formData.isActive}
-              onCheckedChange={(c) => setFormData({ ...formData, isActive: c })}
+              onCheckedChange={(c) => {
+                if (c) {
+                  setFormData({ ...formData, isActive: true });
+                  return;
+                }
+                setShowDeactivateConfirm(true);
+              }}
             />
           </div>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            Если выключить, вкус скроется из продаж и постов; на складе он останется — включите снова здесь или в фильтре «Показать скрытые» на странице склада.
+          </p>
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
@@ -354,6 +416,28 @@ export function EditItemModal({ item, open, onOpenChange }: EditItemModalProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDeactivateConfirm} onOpenChange={setShowDeactivateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Скрыть товар из каталога?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вкус не будет виден в продаже и в генераторе поста. Остатки на складе сохранятся. Включить снова можно здесь или через фильтр «Показать скрытые» на складе.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setFormData((prev) => ({ ...prev, isActive: false }));
+                setShowDeactivateConfirm(false);
+              }}
+            >
+              Скрыть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

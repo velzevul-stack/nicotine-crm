@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { ScreenHelpDialog } from '@/components/ScreenHelpDialog';
+import { HELP_POST } from '@/lib/screen-help-content';
 import { Copy, Filter, Lightbulb, Download, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -269,7 +271,11 @@ export function PostGenerator() {
 
   return (
     <>
-      <ScreenHeader title="Пост в чат" subtitle="Генерация поста по наличию" />
+      <ScreenHeader
+        title="Пост в чат"
+        subtitle="Генерация поста по наличию"
+        actions={<ScreenHelpDialog help={HELP_POST} />}
+      />
 
       <div className="px-5 space-y-6 pb-6">
         {/* Format Selection + Filters */}
@@ -291,24 +297,24 @@ export function PostGenerator() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="mt-3 flex flex-col gap-2 min-[400px]:flex-row min-[400px]:flex-wrap min-w-0">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => router.push('/post/formats')}
-                className="rounded-[12px]"
+                className="rounded-[12px] w-full min-[400px]:flex-1 min-[400px]:min-w-[140px] shrink-0"
               >
-                <FileText size={14} className="mr-1.5" />
-                Форматы
+                <FileText size={14} className="mr-1.5 shrink-0" />
+                <span className="truncate">Форматы</span>
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => setShowSuggestModal(true)}
-                className="rounded-[12px]"
+                className="rounded-[12px] w-full min-[400px]:flex-1 min-[400px]:min-w-[140px] shrink-0"
               >
-                <Lightbulb size={14} className="mr-1.5" />
-                Предложить формат
+                <Lightbulb size={14} className="mr-1.5 shrink-0" />
+                <span className="truncate">Предложить формат</span>
               </Button>
             </div>
           </section>
@@ -328,25 +334,25 @@ export function PostGenerator() {
               </span>
             )}
           </Button>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 min-[360px]:grid-cols-2">
             <Button
               variant="default"
               size="lg"
-              className="h-12 rounded-[18px] font-semibold"
+              className="h-12 min-w-0 rounded-[18px] font-semibold"
               onClick={handleCopy}
               disabled={!postText}
             >
-              <Copy size={18} className="mr-2" />
-              {copied ? 'Скопировано!' : 'Копировать'}
+              <Copy size={18} className="mr-2 shrink-0" />
+              <span className="truncate">{copied ? 'Скопировано!' : 'Копировать'}</span>
             </Button>
             <Button
               variant="default"
               size="lg"
-              className="h-12 rounded-[18px] font-semibold"
+              className="h-12 min-w-0 rounded-[18px] font-semibold"
               onClick={handleExport}
             >
-              <Download size={18} className="mr-2" />
-              Excel
+              <Download size={18} className="mr-2 shrink-0" />
+              <span className="truncate">Excel</span>
             </Button>
           </div>
           </section>

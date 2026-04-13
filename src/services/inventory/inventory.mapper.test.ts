@@ -83,6 +83,12 @@ describe('parseInventoryListFilters', () => {
     const f = parseInventoryListFilters(p);
     expect(f.inStockOnly).toBe(true);
     expect(f.search).toBe('ab');
+    expect(f.includeInactive).toBe(false);
+  });
+
+  it('parses includeInactive', () => {
+    const f = parseInventoryListFilters(new URLSearchParams('includeInactive=1'));
+    expect(f.includeInactive).toBe(true);
   });
 });
 
@@ -107,6 +113,18 @@ describe('matchesInventoryListFilters', () => {
         { ...parseInventoryListFilters(new URLSearchParams()), inStockOnly: true },
       ),
     ).toBe(false);
+  });
+
+  it('hides inactive flavor or format unless includeInactive', () => {
+    const base = parseInventoryListFilters(new URLSearchParams());
+    expect(matchesInventoryListFilters({ ...row, flavor: { ...row.flavor, isActive: false } }, base)).toBe(false);
+    expect(
+      matchesInventoryListFilters({ ...row, flavor: { ...row.flavor, isActive: false } }, { ...base, includeInactive: true }),
+    ).toBe(true);
+    expect(matchesInventoryListFilters({ ...row, format: { ...row.format, isActive: false } }, base)).toBe(false);
+    expect(
+      matchesInventoryListFilters({ ...row, format: { ...row.format, isActive: false } }, { ...base, includeInactive: true }),
+    ).toBe(true);
   });
 });
 

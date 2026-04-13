@@ -4,6 +4,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { InventoryFilters } from '@/hooks/useInventoryFilters';
+import { filterNonNegativeDecimalInput } from '@/lib/numeric-input';
 
 interface QuickFiltersProps {
   filters: InventoryFilters;
@@ -48,7 +49,21 @@ export function QuickFilters({ filters, onFiltersChange }: QuickFiltersProps) {
             className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-2"
           />
         </label>
+        <label className="flex items-center justify-between cursor-pointer p-2.5 rounded-xl hover:bg-secondary/30 transition-colors group">
+          <span className="text-sm text-foreground/90">Показать скрытые</span>
+          <input
+            type="checkbox"
+            checked={filters.includeInactive}
+            onChange={(e) =>
+              onFiltersChange({ includeInactive: e.target.checked })
+            }
+            className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-2"
+          />
+        </label>
       </div>
+      <p className="text-xs text-muted-foreground pl-0.5">
+        Скрытые — вкус или линейка выключены переключателем «Активен»; по умолчанию их не видно в списке.
+      </p>
     </div>
   );
 }
@@ -219,11 +234,13 @@ export function PriceFilter({ filters, onFiltersChange }: PriceFilterProps) {
             От
           </label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
             placeholder="0"
             value={filters.minPrice}
             onChange={(e) =>
-              onFiltersChange({ minPrice: e.target.value })
+              onFiltersChange({ minPrice: filterNonNegativeDecimalInput(e.target.value) })
             }
             className="h-9 text-sm bg-background border-border/50 focus:border-primary/50"
           />
@@ -233,11 +250,13 @@ export function PriceFilter({ filters, onFiltersChange }: PriceFilterProps) {
             До
           </label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
             placeholder="∞"
             value={filters.maxPrice}
             onChange={(e) =>
-              onFiltersChange({ maxPrice: e.target.value })
+              onFiltersChange({ maxPrice: filterNonNegativeDecimalInput(e.target.value) })
             }
             className="h-9 text-sm bg-background border-border/50 focus:border-primary/50"
           />

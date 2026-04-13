@@ -1,11 +1,30 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { filterStrengthNumericInput, normalizeStrengthMgForSave } from '@/lib/inventory-input-filters';
+import { filterNonNegativeDecimalInput } from '@/lib/numeric-input';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
@@ -62,6 +81,7 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     emojiPrefix: '',
@@ -73,16 +93,22 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
 
   useEffect(() => {
     if (brand && format) {
+      const up = format.unitPrice ?? 0;
       setFormData({
         name: brand.name || '',
         emojiPrefix: brand.emojiPrefix || '',
         categoryId: brand.categoryId || '',
         strengthLabel: format.strengthLabel || '',
-        unitPrice: format.unitPrice || '',
+        unitPrice: up === 0 ? '' : String(up),
         isActive: format.isActive ?? true,
       });
+      setShowDeactivateConfirm(false);
     }
   }, [brand, format]);
+
+  useEffect(() => {
+    if (!open) setShowDeactivateConfirm(false);
+  }, [open]);
 
   // Проверка на похожие бренды
   const similarBrands = useMemo(() => {
@@ -108,13 +134,20 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
         },
       });
       
+      const unitPriceNum =
+        typeof data.unitPrice === 'string'
+          ? data.unitPrice === ''
+            ? 0
+            : parseFloat(data.unitPrice) || 0
+          : data.unitPrice;
+
       // Обновляем формат
       await api(`/api/inventory/format/${format?.id}`, {
         method: 'PATCH',
         body: {
           name: data.name, // Формат имеет то же название что и бренд
           strengthLabel: data.strengthLabel,
-          unitPrice: data.unitPrice,
+          unitPrice: unitPriceNum,
           isActive: data.isActive,
           brandId: brand?.id,
         },
@@ -132,7 +165,6 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
         description: err.message || 'Не удалось обновить бренд',
         variant: 'destructive',
       });
-      toast({ title: 'Ошибка обновления', variant: 'destructive' });
     },
   });
 
@@ -189,8 +221,15 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
       return;
     }
     
+    const catForSave = categories.find((c: any) => c.id === formData.categoryId);
+    const liquid =
+      catForSave?.name?.toLowerCase().includes('жидкост') ||
+      catForSave?.name?.toLowerCase().includes('liquid');
+    const strengthLabel = liquid ? normalizeStrengthMgForSave(formData.strengthLabel) : formData.strengthLabel.trim();
+
     updateBrandMutation.mutate({
       ...formData,
+      strengthLabel,
       unitPrice: unitPriceValue,
     });
   };
@@ -203,7 +242,10 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-card border-border max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="glass-card border-border max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Редактирование бренда (линейки)</DialogTitle>
         </DialogHeader>
@@ -243,20 +285,21 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
 
           <div className="space-y-2">
             <Label htmlFor="categoryId">Категория</Label>
-            <select
-              id="categoryId"
-              value={formData.categoryId}
-              onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-              className="w-full h-10 px-3 rounded-md border border-border bg-secondary text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              required
+            <Select
+              value={formData.categoryId || undefined}
+              onValueChange={(v) => setFormData({ ...formData, categoryId: v })}
             >
-              <option value="">Выберите категорию</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.emoji} {cat.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="categoryId" className="h-10 w-full">
+                <SelectValue placeholder="Выберите категорию" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.emoji} {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {isLiquidCategory && (
@@ -264,10 +307,17 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
               <Label htmlFor="strengthLabel">Крепость (мг)</Label>
               <Input
                 id="strengthLabel"
+                inputMode="decimal"
                 value={formData.strengthLabel}
-                onChange={(e) => setFormData({ ...formData, strengthLabel: e.target.value })}
-                placeholder="50 mg"
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    strengthLabel: filterStrengthNumericInput(e.target.value),
+                  })
+                }
+                placeholder="50"
               />
+              <p className="text-[10px] text-muted-foreground">Введите число, «mg» подставится при сохранении</p>
             </div>
           )}
 
@@ -275,10 +325,17 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
             <Label htmlFor="unitPrice">Цена продажи</Label>
             <Input
               id="unitPrice"
-              type="number"
-              step="0.01"
-              value={formData.unitPrice}
-              onChange={(e) => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={formData.unitPrice === '' ? '' : String(formData.unitPrice)}
+              onChange={(e) => {
+                setFormData({ ...formData, unitPrice: filterNonNegativeDecimalInput(e.target.value) });
+              }}
+              onFocus={(e) => {
+                if (e.target.value === '0') e.target.select();
+              }}
+              placeholder="0"
               required
             />
           </div>
@@ -293,9 +350,18 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
             <Switch
               id="isActive"
               checked={formData.isActive}
-              onCheckedChange={(c) => setFormData({ ...formData, isActive: c })}
+              onCheckedChange={(c) => {
+                if (c) {
+                  setFormData({ ...formData, isActive: true });
+                  return;
+                }
+                setShowDeactivateConfirm(true);
+              }}
             />
           </div>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            Если выключить, линейка скроется из продаж и постов; остатки на складе сохранятся.
+          </p>
 
           {/* Предпросмотр */}
           <div className="p-3 bg-secondary/50 rounded-lg border border-border">
@@ -367,6 +433,28 @@ export function EditBrandModal({ brand, format, categories, brands, open, onOpen
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDeactivateConfirm} onOpenChange={setShowDeactivateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Скрыть линейку из каталога?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Линейка не будет видна в продаже и в генераторе поста. Остатки по вкусам сохранятся. Включить снова можно здесь или через фильтр «Показать скрытые» на складе.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setFormData((prev) => ({ ...prev, isActive: false }));
+                setShowDeactivateConfirm(false);
+              }}
+            >
+              Скрыть
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

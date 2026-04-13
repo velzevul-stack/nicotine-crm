@@ -25,6 +25,8 @@ export interface Flavor {
   quantity?: number;
   postQuantity?: number;
   reservedQuantity?: number;
+  /** false — скрыт из каталога продаж */
+  isActive?: boolean;
 }
 
 export interface ProductFormat {
@@ -34,6 +36,7 @@ export interface ProductFormat {
   size: string | null;
   type: string | null;
   unitPrice?: number;
+  isActive?: boolean;
 }
 
 export interface Brand {

@@ -27,8 +27,8 @@ export async function loadInventoryBaseRows(ds: DataSource, shopId: string): Pro
   const [categories, brands, formats, flavors, stocks] = await Promise.all([
     categoryRepo.find({ where: { shopId }, order: { sortOrder: 'ASC' } }),
     brandRepo.find({ where: { shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-    formatRepo.find({ where: { shopId, isActive: true }, order: { name: 'ASC' } }),
-    flavorRepo.find({ where: { shopId, isActive: true }, order: { name: 'ASC' } }),
+    formatRepo.find({ where: { shopId }, order: { name: 'ASC' } }),
+    flavorRepo.find({ where: { shopId }, order: { name: 'ASC' } }),
     stockRepo.find({ where: { shopId } }),
   ]);
 

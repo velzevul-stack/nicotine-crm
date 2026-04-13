@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useInventoryFilters, InventoryFilters } from '@/hooks/useInventoryFilters';
 import { getActiveFiltersForCategory } from '@/lib/smart-filters-config';
+import { filterNonNegativeDecimalInput } from '@/lib/numeric-input';
 
 interface SidebarFiltersProps {
   categories: any[];
@@ -239,11 +240,13 @@ export function SidebarFilters({ categories, strengths, brands }: SidebarFilters
               От
             </label>
             <Input
-              type="number"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               placeholder="0"
               value={filters.minPrice}
               onChange={(e) =>
-                updateFilters({ minPrice: e.target.value })
+                updateFilters({ minPrice: filterNonNegativeDecimalInput(e.target.value) })
               }
               className="h-9 text-sm bg-background border-border/50 focus:border-primary/50"
             />
@@ -253,11 +256,13 @@ export function SidebarFilters({ categories, strengths, brands }: SidebarFilters
               До
             </label>
             <Input
-              type="number"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               placeholder="∞"
               value={filters.maxPrice}
               onChange={(e) =>
-                updateFilters({ maxPrice: e.target.value })
+                updateFilters({ maxPrice: filterNonNegativeDecimalInput(e.target.value) })
               }
               className="h-9 text-sm bg-background border-border/50 focus:border-primary/50"
             />
