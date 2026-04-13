@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dialog,
@@ -24,6 +24,8 @@ import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from '@/hooks/use-toast';
 import { DateTimePicker } from '@/components/ui/datetime-picker';
 import { flavorAvailableQuantity } from '@/lib/flavor-available-qty';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { buildSalesSearchItems, runSalesSearch } from '@/components/sales/sales-search';
 import type {
   InventoryResponse,
   Flavor,
@@ -170,19 +172,16 @@ export function SaleFormModal({
     Array.isArray(inventoryData?.productFormats) ? inventoryData.productFormats : [];
   const brands = Array.isArray(inventoryData?.brands) ? inventoryData.brands : [];
 
-  const searchResults =
-    search.length >= 2
-      ? flavors
-          .filter((f) => {
-            const format = productFormats.find((pf) => pf.id === f.productFormatId);
-            const brand = format ? brands.find((b) => b.id === format.brandId) : null;
-            const combined = `${brand?.name || ''} ${format?.name || ''} ${f.name}`.toLowerCase();
-            return (
-              combined.includes(search.toLowerCase()) && flavorAvailableQuantity(f) > 0
-            );
-          })
-          .slice(0, 8)
-      : [];
+  const debouncedSearch = useDebouncedValue(search, 200);
+  const deferredSearch = useDeferredValue(debouncedSearch);
+  const searchIndex = useMemo(
+    () => buildSalesSearchItems({ flavors, productFormats, brands }),
+    [flavors, productFormats, brands]
+  );
+  const searchResults = useMemo(
+    () => runSalesSearch({ items: searchIndex, query: deferredSearch, limit: 20 }),
+    [searchIndex, deferredSearch]
+  );
 
   const addToCart = (flavorId: string) => {
     const flavor = flavors.find((f) => f.id === flavorId);
@@ -381,39 +380,54 @@ export function SaleFormModal({
             />
             <input
               type="text"
-              placeholder="Поиск товара..."
+              placeholder="Начните поиск по названию или штрихкоду..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#1B2030] border border-white/10 text-[#F5F5F7] text-sm placeholder:text-[#9CA3AF] focus:outline-none focus:ring-1 focus:ring-[#BFE7E5]/50"
             />
             <AnimatePresence>
-              {searchResults.length > 0 && (
+              {search.trim().length >= 2 && searchResults.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
-                  className="absolute top-full left-0 right-0 z-20 mt-1 bg-[#1B2030] rounded-xl border border-white/10 overflow-hidden shadow-lg"
+                  className="absolute top-full left-0 right-0 z-20 mt-1 max-h-72 overflow-y-auto space-y-2 bg-[#1B2030] rounded-xl border border-white/10 p-2 shadow-lg"
                 >
-                {searchResults.map((f) => {
-                  const format = productFormats.find((pf) => pf.id === f.productFormatId)!;
-                  const brand = brands.find((b) => b.id === format.brandId)!;
-                  return (
+                  {searchResults.map((item) => (
                     <button
-                      key={f.id}
-                      onClick={() => addToCart(f.id)}
-                      className="w-full flex items-center justify-between p-3 hover:bg-white/5 border-b border-white/5 last:border-0"
+                      key={item.flavorId}
+                      onClick={() => addToCart(item.flavorId)}
+                      className="w-full text-left p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10"
                     >
-                      <p className="text-sm text-[#F5F5F7]">{f.name}</p>
-                      <span className="text-xs text-[#BFE7E5] font-medium">
-                        {formatCurrency(format.unitPrice ?? 0, shopData?.currency)}
-                      </span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm text-[#F5F5F7] font-medium truncate">{item.flavorName}</p>
+                          <p className="text-xs text-[#9CA3AF] truncate">
+                            {item.brandEmojiPrefix} {item.brandName} {item.formatName}
+                          </p>
+                          <p className="text-xs text-[#9CA3AF]">доступно {item.availableQty} шт</p>
+                          {item.barcode && (
+                            <p className="text-[11px] text-[#9CA3AF]/90 font-mono truncate">
+                              штрихкод: {item.barcode}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-xs text-[#BFE7E5] font-medium shrink-0">
+                          {formatCurrency(item.unitPrice, shopData?.currency)}
+                        </span>
+                      </div>
                     </button>
-                  );
-                })}
+                  ))}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
+          {search.trim().length > 0 && search.trim().length < 2 && (
+            <p className="text-xs text-[#9CA3AF]">Введите минимум 2 символа для поиска.</p>
+          )}
+          {search.trim().length >= 2 && searchResults.length === 0 && (
+            <p className="text-xs text-[#9CA3AF]">Ничего не найдено по вашему запросу.</p>
+          )}
 
           {/* Catalog */}
           {inventoryData && (

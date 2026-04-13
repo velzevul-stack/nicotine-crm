@@ -1,176 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { getDataSource } from '@/lib/db/data-source';
 import { checkAuthRateLimit } from '@/lib/rate-limit';
-import { UserEntity } from '@/lib/db/entities/User';
-import { generateAccessKey, generateReferralCode } from '@/lib/utils/crypto';
-import { checkUserSubscription, canAccess } from '@/lib/auth-utils';
-import { createSignedSession } from '@/lib/session-token';
-import { ensureUserHasShop } from '@/lib/ensure-user-shop';
-import {
-  applyWendigoSuperadminToUser,
-  isWendigoTarget,
-} from '@/lib/superadmin-bootstrap';
-import { getTrialDays } from '@/lib/system-settings';
-
-type ParsedTelegramInit = {
-  telegramId: string;
-  firstName: string | null;
-  lastName: string | null;
-  username: string | null;
-  startParam?: string;
-};
-
-function validateInitData(initData: string, botToken: string): ParsedTelegramInit | null {
-  const params = new URLSearchParams(initData);
-  const hash = params.get('hash');
-  if (!hash) return null;
-  params.delete('hash');
-  const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join('\n');
-  const secret = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
-  const computed = crypto.createHmac('sha256', secret).update(dataCheckString).digest('hex');
-  if (computed !== hash) return null;
-  const userStr = params.get('user');
-  if (!userStr) return null;
-  try {
-    const user = JSON.parse(decodeURIComponent(userStr));
-    const startParamRaw = params.get('start_param');
-    const startParam =
-      startParamRaw && startParamRaw.trim() ? startParamRaw.trim() : undefined;
-    return {
-      telegramId: String(user.id),
-      firstName: user.first_name ?? null,
-      lastName: user.last_name ?? null,
-      username: user.username ?? null,
-      ...(startParam ? { startParam } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
+import { serviceErrorResponse } from '@/lib/api/service-error-response';
+import { loginWithTelegramInitData } from '@/services/auth/telegram-login.service';
 
 export async function POST(request: NextRequest) {
   const rateLimitResponse = checkAuthRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
-    const { initData } = await request.json();
-    if (!initData || typeof initData !== 'string') {
-      return NextResponse.json({ message: 'initData required' }, { status: 400 });
-    }
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
-      return NextResponse.json({ message: 'Bot not configured' }, { status: 500 });
-    }
-    const parsed = validateInitData(initData, botToken);
-    if (!parsed) {
-      console.warn('[auth/telegram] Invalid initData signature or format');
-      return NextResponse.json({ message: 'Authentication failed' }, { status: 401 });
-    }
-    const ds = await getDataSource();
-    const userRepo = ds.getRepository(UserEntity);
-
-    let user = await userRepo.findOne({ where: { telegramId: parsed.telegramId } });
-
-    if (!user) {
-      const trialDays = await getTrialDays();
-      const trialEndsAt = new Date();
-      trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
-
-      const accessKey = generateAccessKey();
-      const referralCode = generateReferralCode();
-
-      let referrerId: string | null = null;
-      const sp = parsed.startParam?.trim();
-      if (sp) {
-        const referrer = await userRepo.findOne({ where: { referralCode: sp } });
-        if (referrer && String(referrer.telegramId) !== String(parsed.telegramId)) {
-          referrerId = referrer.id;
-        }
-      }
-
-      user = userRepo.create({
-        telegramId: parsed.telegramId,
-        firstName: parsed.firstName ?? null,
-        lastName: parsed.lastName ?? null,
-        username: parsed.username ?? null,
-        role: 'seller', // По умолчанию seller, можно изменить через бота
-        accessKey,
-        subscriptionStatus: 'trial',
-        trialEndsAt,
-        referralCode,
-        referrerId,
-        isActive: true,
-      });
-      await applyWendigoSuperadminToUser(userRepo, user);
-      await userRepo.save(user);
-    } else {
-      // Обновляем данные пользователя, если они изменились
-      if (parsed.firstName && user.firstName !== parsed.firstName) {
-        user.firstName = parsed.firstName;
-      }
-      if (parsed.lastName && user.lastName !== parsed.lastName) {
-        user.lastName = parsed.lastName;
-      }
-      if (parsed.username && user.username !== parsed.username) {
-        user.username = parsed.username;
-      }
-      await applyWendigoSuperadminToUser(userRepo, user);
-      // Генерируем accessKey, если его нет (не для фиксированного ключа wendigo)
-      if (!user.accessKey && !isWendigoTarget(user.telegramId, user.username)) {
-        user.accessKey = generateAccessKey();
-      }
-      // Генерируем referralCode, если его нет
-      if (!user.referralCode) {
-        user.referralCode = generateReferralCode();
-      }
-      await userRepo.save(user);
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ message: 'Invalid request body' }, { status: 400 });
     }
 
-    const shop = await ensureUserHasShop(ds, user);
+    const result = await loginWithTelegramInitData(body);
 
-    const session = {
-      userId: String(user.id),
-      shopId: String(shop.id),
-      telegramId: String(user.telegramId ?? ''),
-    };
-
-    // Проверяем подписку после успешного логина
-    const userWithSub = await checkUserSubscription(user.id);
-    const hasAccess = canAccess(userWithSub);
-
-    // Явный объект (без spread сущности) — клиент всегда получает accessKey для localStorage
     const res = NextResponse.json({
-      user: {
-        id: user.id,
-        telegramId: user.telegramId,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        username: user.username,
-        role: user.role,
-        accessKey: user.accessKey,
-        subscriptionStatus: user.subscriptionStatus,
-        trialEndsAt: user.trialEndsAt,
-        subscriptionEndsAt: user.subscriptionEndsAt,
-        referralCode: user.referralCode,
-        referrerId: user.referrerId,
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
-      shop,
-      session,
-      subscriptionStatus: {
-        hasActiveSubscription: userWithSub?.hasActiveSubscription ?? false,
-        isTrialExpired: userWithSub?.isTrialExpired ?? false,
-        canAccess: hasAccess,
-      },
+      user: result.user,
+      shop: result.shop,
+      session: result.session,
+      subscriptionStatus: result.subscriptionStatus,
     });
 
-    res.cookies.set('session', createSignedSession(session), {
+    res.cookies.set('session', result.signedSession, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -180,6 +34,6 @@ export async function POST(request: NextRequest) {
     return res;
   } catch (e) {
     console.error('[auth/telegram] Error:', e);
-    return NextResponse.json({ message: 'Authentication failed' }, { status: 500 });
+    return serviceErrorResponse(e, 'Internal server error');
   }
 }

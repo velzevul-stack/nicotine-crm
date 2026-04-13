@@ -39,6 +39,10 @@
     "node_modules",
     "src/scripts/**",
     "src/test/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
     "vitest.config.ts"
   ]
 }

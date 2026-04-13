@@ -1,10 +1,10 @@
 export { UserEntity, type User } from './User';
 export { ShopEntity, type Shop } from './Shop';
 export { UserShopEntity } from './UserShop';
-export { CategoryEntity, type CategoryField } from './Category';
-export { BrandEntity } from './Brand';
-export { ProductFormatEntity } from './ProductFormat';
-export { FlavorEntity } from './Flavor';
+export { CategoryEntity, type Category, type CategoryField } from './Category';
+export { BrandEntity, type Brand } from './Brand';
+export { ProductFormatEntity, type ProductFormat } from './ProductFormat';
+export { FlavorEntity, type Flavor } from './Flavor';
 export { StockItemEntity, type StockItem } from './StockItem';
 export { SaleEntity, type Sale } from './Sale';
 export { SaleItemEntity, type SaleItem } from './SaleItem';

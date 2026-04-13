@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { Search, Plus, Minus, X, ShoppingCart, CreditCard, Banknote, Wallet, ChevronRight, ArrowLeft, Clock } from 'lucide-react';
+import { Search, Plus, Minus, X, ShoppingCart, CreditCard, Banknote, Wallet, ChevronRight, ArrowLeft, Clock, ScanLine } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
@@ -12,6 +12,9 @@ import { DateTimePicker } from '@/components/ui/datetime-picker';
 import { useToast } from '@/hooks/use-toast';
 import { flavorAvailableQuantity } from '@/lib/flavor-available-qty';
 import type { InventoryResponse, Flavor, ProductFormat, Brand, Category, CreateSalePayload, Sale } from '@/types/api';
+import { ScanModal } from '@/components/inventory/ScanModal';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { buildSalesSearchItems, runSalesSearch } from '@/components/sales/sales-search';
 
 interface CartItem {
   flavorId: string;
@@ -38,6 +41,7 @@ export function Sales() {
   const [reservationCustomerName, setReservationCustomerName] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [isScanOpen, setIsScanOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: shopData } = useQuery({
@@ -110,21 +114,16 @@ export function Sales() {
   const brands = Array.isArray(inventoryData?.brands) ? inventoryData.brands : [];
   const categories = Array.isArray(inventoryData?.categories) ? inventoryData.categories : [];
 
-  const searchResults =
-    search.length >= 2
-      ? flavors
-          .filter((f) => {
-            const format = productFormats.find((pf) => pf.id === f.productFormatId);
-            const brand = format
-              ? brands.find((b) => b.id === format.brandId)
-              : null;
-            const combined = `${brand?.name || ''} ${format?.name || ''} ${f.name}`.toLowerCase();
-            return (
-              combined.includes(search.toLowerCase()) && flavorAvailableQuantity(f) > 0
-            );
-          })
-          .slice(0, 8)
-      : [];
+  const debouncedSearch = useDebouncedValue(search, 200);
+  const deferredSearch = useDeferredValue(debouncedSearch);
+  const searchIndex = useMemo(
+    () => buildSalesSearchItems({ flavors, productFormats, brands }),
+    [flavors, productFormats, brands]
+  );
+  const searchResults = useMemo(
+    () => runSalesSearch({ items: searchIndex, query: deferredSearch, limit: 40 }),
+    [searchIndex, deferredSearch]
+  );
 
   const addToCart = (flavorId: string) => {
     const flavor = flavors.find((f) => f.id === flavorId);
@@ -168,6 +167,26 @@ export function Sales() {
     }
     setSearch('');
     setError('');
+  };
+
+  const handleScannedCode = (code: string) => {
+    const normalized = code.trim();
+    if (!normalized) return;
+    setSearch(normalized);
+    const exactMatches = searchIndex.filter(
+      (item) => item.barcode && item.barcode.toLowerCase() === normalized.toLowerCase()
+    );
+    if (exactMatches.length === 1) {
+      addToCart(exactMatches[0].flavorId);
+      setIsScanOpen(false);
+      return;
+    }
+    if (exactMatches.length === 0) {
+      setError('Товар по штрихкоду не найден, проверьте код или выберите вручную');
+    } else {
+      setError('Найдено несколько товаров по штрихкоду, выберите нужный из списка');
+    }
+    setIsScanOpen(false);
   };
 
   const updateCartQty = (flavorId: string, delta: number) => {
@@ -339,52 +358,78 @@ export function Sales() {
           </TabsList>
 
           <TabsContent value="search" className="mt-0">
-            <div className="relative">
-              <Search
-                size={20}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
-                strokeWidth={1.5}
-              />
-              <input
-                type="text"
-                placeholder="Поиск товара..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-[18px] bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
-              />
-              <AnimatePresence>
-                {searchResults.length > 0 && (
+            <div className="space-y-3">
+              <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                  <Search
+                    size={20}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    strokeWidth={1.5}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Начните поиск по названию или штрихкоду..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-[18px] bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsScanOpen(true)}
+                  className="px-3 rounded-[14px] bg-card border border-border hover:bg-secondary/50 transition-colors"
+                  aria-label="Сканировать штрихкод"
+                >
+                  <ScanLine size={18} />
+                </button>
+              </div>
+              <AnimatePresence mode="wait">
+                {search.trim().length >= 2 && searchResults.length === 0 ? (
                   <motion.div
+                    key="search-empty"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="text-sm text-muted-foreground bg-card border border-border rounded-[16px] p-3"
+                  >
+                    Ничего не найдено. Попробуйте другое название или штрихкод.
+                  </motion.div>
+                ) : search.trim().length >= 2 ? (
+                  <motion.div
+                    key="search-results"
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="absolute top-12 left-0 right-0 z-20 bg-card rounded-[18px] border border-border overflow-hidden shadow-lg"
+                    className="max-h-[52vh] overflow-y-auto"
                   >
-                    {searchResults.map((f) => {
-                        const format = productFormats.find(
-                          (pf) => pf.id === f.productFormatId
-                        )!;
-                      const brand = brands.find((b) => b.id === format.brandId)!;
-                      return (
+                    <div className="grid grid-cols-2 gap-2">
+                      {searchResults.map((item) => (
                         <button
-                          key={f.id}
-                          onClick={() => addToCart(f.id)}
-                          className="w-full flex items-center justify-between p-3 hover:bg-secondary/50 transition-colors border-b border-border last:border-0"
+                          key={item.flavorId}
+                          onClick={() => addToCart(item.flavorId)}
+                          className="min-h-[132px] text-left p-3 rounded-[16px] bg-card border border-border hover:bg-secondary/40 transition-colors"
                         >
-                          <div className="text-left flex-1">
-                            <p className="text-sm font-medium">{f.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {brand.emojiPrefix} {format.name} • доступно {flavorAvailableQuantity(f)} шт
+                          <div className="h-full flex flex-col">
+                            <p className="text-sm font-semibold leading-snug line-clamp-2">
+                              {item.brandEmojiPrefix} {item.brandName}
                             </p>
+                            <p className="text-xs text-muted-foreground leading-snug line-clamp-2 mt-0.5">
+                              {item.formatName} {item.flavorName}
+                            </p>
+                            <div className="mt-auto pt-2">
+                              <p className="text-xs text-muted-foreground">
+                                доступно {item.availableQty} шт
+                              </p>
+                              <p className="font-mono-nums text-sm text-primary font-semibold">
+                                {formatCurrency(item.unitPrice, shopData?.currency)}
+                              </p>
+                            </div>
                           </div>
-                          <span className="font-mono-nums text-sm text-primary font-semibold ml-3">
-                            {formatCurrency(format.unitPrice ?? 0, shopData?.currency)}
-                          </span>
                         </button>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </motion.div>
-                )}
+                ) : null}
               </AnimatePresence>
             </div>
           </TabsContent>
@@ -737,6 +782,7 @@ export function Sales() {
           </div>
         )}
       </div>
+      <ScanModal open={isScanOpen} onOpenChange={setIsScanOpen} onScan={handleScannedCode} />
     </>
   );
 }

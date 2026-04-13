@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDataSource } from '@/lib/db/data-source';
-import { UserEntity } from '@/lib/db/entities';
 import { getSession } from '@/lib/auth';
-import { checkUserSubscription } from '@/lib/auth-utils';
+import { serviceErrorResponse } from '@/lib/api/service-error-response';
+import { adminListReferralsByReferrer } from '@/services/admin/admin-user-referrals.service';
 
 export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const session = await getSession();
@@ -14,18 +13,10 @@ export async function GET(
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const userWithSub = await checkUserSubscription(session.userId);
-  if (!userWithSub || userWithSub.role !== 'admin') {
-    return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+  try {
+    const payload = await adminListReferralsByReferrer(session.userId, id);
+    return NextResponse.json(payload);
+  } catch (e) {
+    return serviceErrorResponse(e, 'Internal server error');
   }
-
-  const ds = await getDataSource();
-  const userRepo = ds.getRepository(UserEntity);
-
-  const referrals = await userRepo.find({
-    where: { referrerId: id },
-    order: { createdAt: 'DESC' },
-  });
-
-  return NextResponse.json({ referrals });
 }

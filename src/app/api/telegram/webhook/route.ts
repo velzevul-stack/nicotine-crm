@@ -115,6 +115,65 @@ async function getMainMenuForUser(ds: DataSource, user: { id: string; accessKey?
   return getMainMenu(support, user.accessKey);
 }
 
+/** Параллельное чтение без `transaction`: запросы идут через пул, не на одном клиенте node-pg. */
+async function loadTelegramPostMenuData(ds: DataSource, shopId: string) {
+  const [categories, brands, formats, flavors, stocks, postFormats] = await Promise.all([
+    ds.getRepository(CategoryEntity).find({ where: { shopId }, order: { sortOrder: 'ASC' } }),
+    ds.getRepository(BrandEntity).find({
+      where: { shopId },
+      order: { sortOrder: 'ASC', name: 'ASC' },
+    }),
+    ds.getRepository(ProductFormatEntity).find({ where: { shopId, isActive: true } }),
+    ds.getRepository(FlavorEntity).find({ where: { shopId, isActive: true } }),
+    ds.getRepository(StockItemEntity).find({ where: { shopId } }),
+    ds.getRepository(PostFormatEntity).find({
+      where: [
+        { isActive: true, shopId: IsNull() },
+        { isActive: true, shopId },
+      ],
+      order: { createdAt: 'DESC' },
+    }),
+  ]);
+  return { categories, brands, formats, flavors, stocks, postFormats };
+}
+
+async function loadTelegramFormatsFlavorsStocks(ds: DataSource, shopId: string) {
+  return Promise.all([
+    ds.getRepository(ProductFormatEntity).find({ where: { shopId, isActive: true } }),
+    ds.getRepository(FlavorEntity).find({ where: { shopId, isActive: true } }),
+    ds.getRepository(StockItemEntity).find({ where: { shopId } }),
+  ]);
+}
+
+async function loadTelegramInventoryFive(ds: DataSource, shopId: string) {
+  return Promise.all([
+    ds.getRepository(CategoryEntity).find({ where: { shopId }, order: { sortOrder: 'ASC' } }),
+    ds.getRepository(BrandEntity).find({ where: { shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
+    ds.getRepository(ProductFormatEntity).find({ where: { shopId, isActive: true }, order: { name: 'ASC' } }),
+    ds.getRepository(FlavorEntity).find({ where: { shopId, isActive: true }, order: { name: 'ASC' } }),
+    ds.getRepository(StockItemEntity).find({ where: { shopId } }),
+  ]);
+}
+
+async function loadTelegramPostPreviewData(ds: DataSource, shopId: string) {
+  const [categories, brands, formats, flavors, stocks, shop, postFormats] = await Promise.all([
+    ds.getRepository(CategoryEntity).find({ where: { shopId }, order: { sortOrder: 'ASC' } }),
+    ds.getRepository(BrandEntity).find({ where: { shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
+    ds.getRepository(ProductFormatEntity).find({ where: { shopId, isActive: true } }),
+    ds.getRepository(FlavorEntity).find({ where: { shopId, isActive: true } }),
+    ds.getRepository(StockItemEntity).find({ where: { shopId } }),
+    ds.getRepository(ShopEntity).findOne({ where: { id: shopId } }),
+    ds.getRepository(PostFormatEntity).find({
+      where: [
+        { isActive: true, shopId: IsNull() },
+        { isActive: true, shopId },
+      ],
+      order: { createdAt: 'DESC' },
+    }),
+  ]);
+  return { categories, brands, formats, flavors, stocks, shop, postFormats };
+}
+
 // Состояние выбора роли (в памяти, для MVP достаточно)
 const roleSelectionState = new Map<number, { role: 'seller' | 'client'; referrerCode?: string }>();
 
@@ -471,39 +530,10 @@ bot.command('key', async (ctx) => {
 async function showPostMenu(ctx: any, userId: number, userShopId: string) {
   const ds = await getDataSource();
   
-  const [categories, brands, formats, flavors, stocks, postFormats] = await ds.transaction(async (em) => {
-    const categoryRepo = em.getRepository(CategoryEntity);
-    const brandRepo = em.getRepository(BrandEntity);
-    const formatRepo = em.getRepository(ProductFormatEntity);
-    const flavorRepo = em.getRepository(FlavorEntity);
-    const stockRepo = em.getRepository(StockItemEntity);
-    const postFormatRepo = em.getRepository(PostFormatEntity);
-
-    return Promise.all([
-      categoryRepo.find({
-        where: { shopId: userShopId },
-        order: { sortOrder: 'ASC' },
-      }),
-      brandRepo.find({ 
-        where: { shopId: userShopId },
-        order: { sortOrder: 'ASC', name: 'ASC' },
-      }),
-      formatRepo.find({
-        where: { shopId: userShopId, isActive: true },
-      }),
-      flavorRepo.find({
-        where: { shopId: userShopId, isActive: true },
-      }),
-      stockRepo.find({ where: { shopId: userShopId } }),
-      postFormatRepo.find({
-        where: [
-          { isActive: true, shopId: IsNull() },
-          { isActive: true, shopId: userShopId },
-        ],
-        order: { createdAt: 'DESC' },
-      }),
-    ]);
-  });
+  const { categories, brands, formats, flavors, stocks, postFormats } = await loadTelegramPostMenuData(
+    ds,
+    userShopId,
+  );
 
   const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
 
@@ -2078,16 +2108,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
   let state = postGenerationState.get(userId);
   if (!state) {
     // Инициализируем состояние
-    const [formats, flavors, stocks] = await ds.transaction(async (em) => {
-      const formatRepo = em.getRepository(ProductFormatEntity);
-      const flavorRepo = em.getRepository(FlavorEntity);
-      const stockRepo = em.getRepository(StockItemEntity);
-      return Promise.all([
-        formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        stockRepo.find({ where: { shopId: userShop.shopId } }),
-      ]);
-    });
+    const [formats, flavors, stocks] = await loadTelegramFormatsFlavorsStocks(ds, userShop.shopId);
     const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
     const filteredFormats = formats.filter((f) => {
       const formatFlavors = flavors.filter((fl) => fl.productFormatId === f.id);
@@ -2128,16 +2149,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
       },
     });
   } else if (action === 'select_all') {
-    const [formats, flavors, stocks] = await ds.transaction(async (em) => {
-      const formatRepo = em.getRepository(ProductFormatEntity);
-      const flavorRepo = em.getRepository(FlavorEntity);
-      const stockRepo = em.getRepository(StockItemEntity);
-      return Promise.all([
-        formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        stockRepo.find({ where: { shopId: userShop.shopId } }),
-      ]);
-    });
+    const [formats, flavors, stocks] = await loadTelegramFormatsFlavorsStocks(ds, userShop.shopId);
     const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
     const filteredFormats = formats.filter((f) => {
       const formatFlavors = flavors.filter((fl) => fl.productFormatId === f.id);
@@ -2236,20 +2248,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     const statusMsg = await ctx.reply('⏳ Генерирую Excel...');
 
     try {
-      const [categories, brands, formats, flavors, stocks] = await ds.transaction(async (em) => {
-        const categoryRepo = em.getRepository(CategoryEntity);
-        const brandRepo = em.getRepository(BrandEntity);
-        const formatRepo = em.getRepository(ProductFormatEntity);
-        const flavorRepo = em.getRepository(FlavorEntity);
-        const stockRepo = em.getRepository(StockItemEntity);
-        return Promise.all([
-          categoryRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC' } }),
-          brandRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-          formatRepo.find({ where: { shopId: userShop.shopId, isActive: true }, order: { name: 'ASC' } }),
-          flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true }, order: { name: 'ASC' } }),
-          stockRepo.find({ where: { shopId: userShop.shopId } }),
-        ]);
-      });
+      const [categories, brands, formats, flavors, stocks] = await loadTelegramInventoryFive(ds, userShop.shopId);
 
       const shopRow = await ds.getRepository(ShopEntity).findOne({
         where: { id: userShop.shopId },
@@ -2312,20 +2311,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     }
   } else if (action === 'filters') {
     // Показываем меню фильтров
-    const [categories, brands, formats, flavors, stocks] = await ds.transaction(async (em) => {
-      const categoryRepo = em.getRepository(CategoryEntity);
-      const brandRepo = em.getRepository(BrandEntity);
-      const formatRepo = em.getRepository(ProductFormatEntity);
-      const flavorRepo = em.getRepository(FlavorEntity);
-      const stockRepo = em.getRepository(StockItemEntity);
-      return Promise.all([
-        categoryRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC' } }),
-        brandRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-        formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        stockRepo.find({ where: { shopId: userShop.shopId } }),
-      ]);
-    });
+    const [categories, brands, formats, flavors, stocks] = await loadTelegramInventoryFive(ds, userShop.shopId);
 
     const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
     const filteredFormats = formats.filter((f) => {
@@ -2403,20 +2389,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('Фильтр обновлён');
     
     // Перезагружаем меню фильтров
-    const [categories, brands, formats, flavors, stocks] = await ds.transaction(async (em) => {
-      const categoryRepo = em.getRepository(CategoryEntity);
-      const brandRepo = em.getRepository(BrandEntity);
-      const formatRepo = em.getRepository(ProductFormatEntity);
-      const flavorRepo = em.getRepository(FlavorEntity);
-      const stockRepo = em.getRepository(StockItemEntity);
-      return Promise.all([
-        categoryRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC' } }),
-        brandRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-        formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        stockRepo.find({ where: { shopId: userShop.shopId } }),
-      ]);
-    });
+    const [categories, brands, formats, flavors, stocks] = await loadTelegramInventoryFive(ds, userShop.shopId);
 
     const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
     const filteredFormats = formats.filter((f) => {
@@ -2491,20 +2464,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('Фильтр обновлён');
     
     // Перезагружаем меню фильтров (аналогично категориям)
-    const [categories, brands, formats, flavors, stocks] = await ds.transaction(async (em) => {
-      const categoryRepo = em.getRepository(CategoryEntity);
-      const brandRepo = em.getRepository(BrandEntity);
-      const formatRepo = em.getRepository(ProductFormatEntity);
-      const flavorRepo = em.getRepository(FlavorEntity);
-      const stockRepo = em.getRepository(StockItemEntity);
-      return Promise.all([
-        categoryRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC' } }),
-        brandRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-        formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        stockRepo.find({ where: { shopId: userShop.shopId } }),
-      ]);
-    });
+    const [categories, brands, formats, flavors, stocks] = await loadTelegramInventoryFive(ds, userShop.shopId);
 
     const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
     const filteredFormats = formats.filter((f) => {
@@ -2579,20 +2539,7 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     await ctx.answerCbQuery('Фильтр обновлён');
     
     // Перезагружаем меню фильтров (аналогично категориям)
-    const [categories, brands, formats, flavors, stocks] = await ds.transaction(async (em) => {
-      const categoryRepo = em.getRepository(CategoryEntity);
-      const brandRepo = em.getRepository(BrandEntity);
-      const formatRepo = em.getRepository(ProductFormatEntity);
-      const flavorRepo = em.getRepository(FlavorEntity);
-      const stockRepo = em.getRepository(StockItemEntity);
-      return Promise.all([
-        categoryRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC' } }),
-        brandRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-        formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-        stockRepo.find({ where: { shopId: userShop.shopId } }),
-      ]);
-    });
+    const [categories, brands, formats, flavors, stocks] = await loadTelegramInventoryFive(ds, userShop.shopId);
 
     const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
     const filteredFormats = formats.filter((f) => {
@@ -2703,31 +2650,10 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     const loadingMsg = await ctx.reply('⏳ Генерирую предпросмотр...');
     
     try {
-      const [categories, brands, formats, flavors, stocks, shop, postFormats] = await ds.transaction(async (em) => {
-        const categoryRepo = em.getRepository(CategoryEntity);
-        const brandRepo = em.getRepository(BrandEntity);
-        const formatRepo = em.getRepository(ProductFormatEntity);
-        const flavorRepo = em.getRepository(FlavorEntity);
-        const stockRepo = em.getRepository(StockItemEntity);
-        const shopRepo = em.getRepository(ShopEntity);
-        const postFormatRepo = em.getRepository(PostFormatEntity);
-
-        return Promise.all([
-          categoryRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC' } }),
-          brandRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-          formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-          flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-          stockRepo.find({ where: { shopId: userShop.shopId } }),
-          shopRepo.findOne({ where: { id: userShop.shopId } }),
-          postFormatRepo.find({
-            where: [
-              { isActive: true, shopId: IsNull() },
-              { isActive: true, shopId: userShop.shopId },
-            ],
-            order: { createdAt: 'DESC' },
-          }),
-        ]);
-      });
+      const { categories, brands, formats, flavors, stocks, shop, postFormats } = await loadTelegramPostPreviewData(
+        ds,
+        userShop.shopId,
+      );
 
       const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
 
@@ -2898,31 +2824,10 @@ bot.action(/^post_(.+)$/, async (ctx) => {
     const loadingMsg = await ctx.reply('⏳ Генерирую пост...');
     
     try {
-      const [categories, brands, formats, flavors, stocks, shop, postFormats] = await ds.transaction(async (em) => {
-        const categoryRepo = em.getRepository(CategoryEntity);
-        const brandRepo = em.getRepository(BrandEntity);
-        const formatRepo = em.getRepository(ProductFormatEntity);
-        const flavorRepo = em.getRepository(FlavorEntity);
-        const stockRepo = em.getRepository(StockItemEntity);
-        const shopRepo = em.getRepository(ShopEntity);
-        const postFormatRepo = em.getRepository(PostFormatEntity);
-
-        return Promise.all([
-          categoryRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC' } }),
-          brandRepo.find({ where: { shopId: userShop.shopId }, order: { sortOrder: 'ASC', name: 'ASC' } }),
-          formatRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-          flavorRepo.find({ where: { shopId: userShop.shopId, isActive: true } }),
-          stockRepo.find({ where: { shopId: userShop.shopId } }),
-          shopRepo.findOne({ where: { id: userShop.shopId } }),
-          postFormatRepo.find({
-            where: [
-              { isActive: true, shopId: IsNull() },
-              { isActive: true, shopId: userShop.shopId },
-            ],
-            order: { createdAt: 'DESC' },
-          }),
-        ]);
-      });
+      const { categories, brands, formats, flavors, stocks, shop, postFormats } = await loadTelegramPostPreviewData(
+        ds,
+        userShop.shopId,
+      );
 
       const stockMap = new Map(stocks.map((s) => [s.flavorId, s]));
 

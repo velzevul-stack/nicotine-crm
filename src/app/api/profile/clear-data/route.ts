@@ -1,19 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getDataSource } from '@/lib/db/data-source';
-import {
-  StockItemEntity,
-  SaleEntity,
-  SaleItemEntity,
-  DebtEntity,
-  DebtOperationEntity,
-  FlavorEntity,
-  ProductFormatEntity,
-  BrandEntity,
-  CategoryEntity,
-  StockMovementEntity,
-} from '@/lib/db/entities';
-import { logStockMovement } from '@/lib/stock-movement-log';
+import { serviceErrorResponse } from '@/lib/api/service-error-response';
+import { clearAllShopTradingData } from '@/services/profile/clear-shop-data.service';
 
 export async function POST() {
   const session = await getSession();
@@ -21,131 +9,10 @@ export async function POST() {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const ds = await getDataSource();
-  const shopId = session.shopId;
-
   try {
-    await ds.transaction(async (em) => {
-      // 1. Удаляем элементы продаж (SaleItemEntity) через продажи
-      const sales = await em.getRepository(SaleEntity).find({
-        where: { shopId },
-      });
-      const saleIds = sales.map((s) => s.id);
-      if (saleIds.length > 0) {
-        await em
-          .createQueryBuilder()
-          .delete()
-          .from(SaleItemEntity)
-          .where('saleId IN (:...saleIds)', { saleIds })
-          .execute();
-      }
-
-      // 2. Удаляем продажи (SaleEntity)
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(SaleEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-      // 3. Удаляем операции по долгам (DebtOperationEntity) через долги
-      const debts = await em.getRepository(DebtEntity).find({
-        where: { shopId },
-      });
-      const debtIds = debts.map((d) => d.id);
-      if (debtIds.length > 0) {
-        await em
-          .createQueryBuilder()
-          .delete()
-          .from(DebtOperationEntity)
-          .where('debtId IN (:...debtIds)', { debtIds })
-          .execute();
-      }
-
-      // 4. Удаляем долги (DebtEntity)
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(DebtEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-      // 5. Фиксируем и удаляем остатки (StockItemEntity)
-      const stocks = await em.getRepository(StockItemEntity).find({
-        where: { shopId },
-      });
-      for (const st of stocks) {
-        if ((st.quantity ?? 0) > 0) {
-          await logStockMovement(em, {
-            shopId,
-            productId: st.flavorId,
-            actionType: 'clear_stock',
-            fromZone: 'warehouse',
-            toZone: null,
-            quantity: st.quantity,
-            postStockBefore: st.quantity,
-            postStockAfter: 0,
-            warehouseBefore: st.quantity,
-            warehouseAfter: 0,
-            comment: 'Полная очистка остатков',
-          });
-        }
-      }
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(StockItemEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-      // 6. Удаляем вкусы (FlavorEntity)
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(FlavorEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-      // 7. Удаляем форматы продуктов (ProductFormatEntity)
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(ProductFormatEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-      // 8. Удаляем бренды (BrandEntity)
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(BrandEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-      // 9. Удаляем категории (CategoryEntity)
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(CategoryEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-      // 10. Удаляем историю движений
-      await em
-        .createQueryBuilder()
-        .delete()
-        .from(StockMovementEntity)
-        .where('shopId = :shopId', { shopId })
-        .execute();
-
-    });
-
-    return NextResponse.json({ message: 'Все данные успешно удалены' });
-  } catch (error: any) {
-    console.error('Error clearing user data:', error);
-    return NextResponse.json(
-      { message: 'Ошибка при удалении данных', error: error.message },
-      { status: 500 }
-    );
+    const result = await clearAllShopTradingData({ shopId: session.shopId });
+    return NextResponse.json(result);
+  } catch (err) {
+    return serviceErrorResponse(err, 'Ошибка при удалении данных');
   }
 }

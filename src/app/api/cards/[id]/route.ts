@@ -1,70 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDataSource } from '@/lib/db/data-source';
 import { getSession } from '@/lib/auth';
-import { CardEntity } from '@/lib/db/entities';
-import { z } from 'zod';
-
-const updateSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  sortOrder: z.number().int().optional(),
-});
+import { serviceErrorResponse } from '@/lib/api/service-error-response';
+import { deleteCard, updateCard } from '@/services/cards/cards.service';
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-  const body = await request.json();
-  const parsed = updateSchema.safeParse(body);
 
-  if (!parsed.success) {
-    return NextResponse.json(
-      { message: 'Invalid body', errors: parsed.error.flatten() },
-      { status: 400 }
-    );
+  try {
+    const body = await request.json();
+    const card = await updateCard({ shopId: session.shopId }, id, body);
+    return NextResponse.json(card);
+  } catch (err) {
+    return serviceErrorResponse(err, 'Ошибка при обновлении карты');
   }
-
-  const ds = await getDataSource();
-  const repo = ds.getRepository(CardEntity);
-
-  const card = await repo.findOne({
-    where: { id, shopId: session.shopId },
-  });
-
-  if (!card) {
-    return NextResponse.json({ message: 'Card not found' }, { status: 404 });
-  }
-
-  if (parsed.data.name !== undefined) card.name = parsed.data.name.trim();
-  if (parsed.data.sortOrder !== undefined) card.sortOrder = parsed.data.sortOrder;
-
-  await repo.save(card);
-
-  return NextResponse.json(card);
 }
 
 export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const session = await getSession();
   if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
-  const ds = await getDataSource();
-  const repo = ds.getRepository(CardEntity);
-
-  const card = await repo.findOne({
-    where: { id, shopId: session.shopId },
-  });
-
-  if (!card) {
-    return NextResponse.json({ message: 'Card not found' }, { status: 404 });
+  try {
+    const result = await deleteCard({ shopId: session.shopId }, id);
+    return NextResponse.json(result);
+  } catch (err) {
+    return serviceErrorResponse(err, 'Ошибка при удалении карты');
   }
-
-  await repo.remove(card);
-
-  return NextResponse.json({ success: true });
 }

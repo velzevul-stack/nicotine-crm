@@ -1,26 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getDataSource } from '@/lib/db/data-source';
+import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { BrandEntity } from '@/lib/db/entities';
+import { serviceErrorResponse } from '@/lib/api/service-error-response';
+import { listBrands } from '@/services/inventory/inventory.brand.service';
 
-// GET - получить все бренды пользователя
 export async function GET() {
   const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  if (!session) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+
+  try {
+    const result = await listBrands({ shopId: session.shopId });
+    return NextResponse.json(result);
+  } catch (err) {
+    return serviceErrorResponse(err, 'Ошибка при загрузке брендов');
   }
-
-  const ds = await getDataSource();
-  
-  // Используем транзакцию для предотвращения параллельных запросов
-  return ds.transaction(async (em) => {
-    const brandRepo = em.getRepository(BrandEntity);
-
-    const brands = await brandRepo.find({
-      where: { shopId: session.shopId },
-      order: { sortOrder: 'ASC', name: 'ASC' },
-    });
-
-    return NextResponse.json({ brands });
-  });
 }

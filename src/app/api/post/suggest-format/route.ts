@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDataSource } from '@/lib/db/data-source';
-import { PostFormatSuggestionEntity } from '@/lib/db/entities';
 import { getSession } from '@/lib/auth';
-import { z } from 'zod';
-
-const suggestSchema = z.object({
-  text: z.string().min(10, 'Предложение должно содержать минимум 10 символов'),
-});
+import { serviceErrorResponse } from '@/lib/api/service-error-response';
+import { createPostFormatSuggestion } from '@/services/post/post-format-suggestion.service';
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -14,26 +9,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json();
-  const parsed = suggestSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { message: 'Invalid body', errors: parsed.error.flatten() },
-      { status: 400 }
-    );
+  try {
+    const body = await request.json();
+    const result = await createPostFormatSuggestion(session, body);
+    return NextResponse.json({ success: true, suggestion: result.suggestion });
+  } catch (e) {
+    return serviceErrorResponse(e, 'Internal server error');
   }
-
-  const ds = await getDataSource();
-  const suggestionRepo = ds.getRepository(PostFormatSuggestionEntity);
-
-  const suggestion = suggestionRepo.create({
-    userId: session.userId,
-    text: parsed.data.text,
-    status: 'pending',
-  });
-
-  await suggestionRepo.save(suggestion);
-
-  return NextResponse.json({ success: true, suggestion });
 }

@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getDataSource } from '@/lib/db/data-source';
+import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { UserEntity } from '@/lib/db/entities/User';
+import { serviceErrorResponse } from '@/lib/api/service-error-response';
+import { getSubscriptionSummary } from '@/services/subscription/subscription.service';
 
 export async function GET() {
   const session = await getSession();
@@ -9,33 +9,10 @@ export async function GET() {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const ds = await getDataSource();
-  const userRepo = ds.getRepository(UserEntity);
-
-  // Получаем текущего пользователя
-  const user = await userRepo.findOne({ where: { id: session.userId } });
-  if (!user) {
-    return NextResponse.json({ message: 'User not found' }, { status: 404 });
+  try {
+    const data = await getSubscriptionSummary({ userId: session.userId });
+    return NextResponse.json(data);
+  } catch (err) {
+    return serviceErrorResponse(err, 'Ошибка при загрузке подписки');
   }
-
-  // Находим всех рефералов этого пользователя
-  const referrals = await userRepo.find({
-    where: { referrerId: user.id },
-  });
-
-  // Подсчитываем статистику
-  const now = new Date();
-  const activeSubscriptions = referrals.filter(
-    (r) => r.subscriptionStatus === 'active' && r.subscriptionEndsAt && new Date(r.subscriptionEndsAt) > now
-  ).length;
-
-  return NextResponse.json({
-    subscriptionStatus: user.subscriptionStatus,
-    trialEndsAt: user.trialEndsAt,
-    subscriptionEndsAt: user.subscriptionEndsAt,
-    referralCode: user.referralCode,
-    referralsCount: referrals.length,
-    activeReferralsCount: activeSubscriptions,
-    referralBalance: Number(user.referralBalance) || 0,
-  });
 }
