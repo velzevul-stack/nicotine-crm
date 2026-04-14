@@ -74,14 +74,19 @@ const BARCODE_FORMATS: Html5QrcodeSupportedFormats[] = [
 const MIN_GAP_MS = 420;
 const SAME_CODE_COOLDOWN_MS = 1600;
 const NOISE_CODE_WINDOW_MS = 850;
-const QRBOX_WIDTH_FACTOR = 0.61; // примерно на 15% меньше прежнего визуального окна (0.72)
+const QRBOX_WIDTH_FACTOR = 0.61; // визуальная рамка (не ограничивает декодирование)
 const QRBOX_ASPECT_RATIO = 1.5; // ширина к высоте
 const FALLBACK_DETECT_INTERVAL_MS = 320;
 
-type BarcodeDetectorResult = { rawValue?: string };
+type BarcodeBounds = { x: number; y: number; width: number; height: number };
+type BarcodeDetectorResult = { rawValue?: string; boundingBox?: BarcodeBounds };
 type BarcodeDetectorLike = { detect: (source: CanvasImageSource) => Promise<BarcodeDetectorResult[]> };
 type BarcodeDetectorCtor = new (opts?: { formats?: string[] }) => BarcodeDetectorLike;
 type BarcodeDetectorGlobal = { BarcodeDetector?: BarcodeDetectorCtor };
+
+function clampPct(n: number) {
+  return Math.min(100, Math.max(0, n));
+}
 
 function waitForElementById(elementId: string, isCancelled: () => boolean, maxFrames = 120): Promise<boolean> {
   return new Promise((resolve) => {
@@ -123,6 +128,7 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
   const [showManual, setShowManual] = useState(false);
   const [scanAttempt, setScanAttempt] = useState(0);
   const [banners, setBanners] = useState<ScanBanner[]>([]);
+  const [detectedBox, setDetectedBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   const [vibrateOn, setVibrateOn] = useState(true);
   const [flashOn, setFlashOn] = useState(false);
@@ -139,6 +145,7 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
   const lastScanAtRef = useRef(0);
   const lastCodeRef = useRef('');
   const lastAcceptedRef = useRef<{ code: string; at: number } | null>(null);
+  const lastBoxAtRef = useRef(0);
   const fallbackLoopStopRef = useRef<null | (() => void)>(null);
   const soundOnRef = useRef(soundOn);
   const vibrateOnRef = useRef(vibrateOn);
@@ -193,6 +200,7 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
       void stopScanner();
       setError(null);
       setBanners([]);
+      setDetectedBox(null);
       setShowManual(false);
       setFlashOn(false);
       return;
@@ -212,24 +220,17 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
       if (!domReady || cancelled) return;
 
       try {
-        const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
         const scanner = new Html5Qrcode(readerId, {
           verbose: false,
           formatsToSupport: BARCODE_FORMATS,
-          // Полный кадр: без qrbox — декодирование по всему периметру кадра (лучше для крупных и «нестандартных» кодов).
-          useBarCodeDetectorIfSupported: !isAndroid,
+          // Для сложных 1D-кодов (в т.ч. EAN/UPC на пачках) JS-декодер часто стабильнее системного BarcodeDetector.
+          useBarCodeDetectorIfSupported: false,
         });
         scannerRef.current = scanner;
 
         const config = {
           fps: 12,
           disableFlip: false,
-          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const width = Math.max(180, Math.floor(viewfinderWidth * QRBOX_WIDTH_FACTOR));
-            const heightByRatio = Math.floor(width / QRBOX_ASPECT_RATIO);
-            const height = Math.min(Math.max(120, heightByRatio), Math.floor(viewfinderHeight * 0.72));
-            return { width, height };
-          },
         };
 
         const onDecoded = (decodedText: string) => {
@@ -260,6 +261,28 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
             queueMicrotask(() => onOpenChangeRef.current(false));
           }
         };
+        const projectBoundsToViewport = (box: BarcodeBounds, video: HTMLVideoElement) => {
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          if (!vw || !vh) return null;
+          const containerW = window.innerWidth;
+          const containerH = window.innerHeight;
+          const scale = Math.max(containerW / vw, containerH / vh);
+          const renderedW = vw * scale;
+          const renderedH = vh * scale;
+          const offsetX = (containerW - renderedW) / 2;
+          const offsetY = (containerH - renderedH) / 2;
+          const left = offsetX + box.x * scale;
+          const top = offsetY + box.y * scale;
+          const width = box.width * scale;
+          const height = box.height * scale;
+          return {
+            left: clampPct((left / containerW) * 100),
+            top: clampPct((top / containerH) * 100),
+            width: clampPct((width / containerW) * 100),
+            height: clampPct((height / containerH) * 100),
+          };
+        };
 
         const devices = await Html5Qrcode.getCameras();
         if (!devices?.length) {
@@ -279,11 +302,12 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
         const applyQualityConstraints = () =>
           scanner
             .applyVideoConstraints({
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
               advanced: [
                 { focusMode: 'continuous' },
                 { pointsOfInterest: [{ x: 0.5, y: 0.5 }] },
+                { zoom: 1.0 },
                 { sharpness: 1 },
                 { contrast: 1 },
               ],
@@ -314,24 +338,54 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
                 const vw = video.videoWidth;
                 const vh = video.videoHeight;
                 const variants = [
-                  { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1 },
-                  { sx: Math.floor(vw * 0.2), sy: Math.floor(vh * 0.2), sw: Math.floor(vw * 0.6), sh: Math.floor(vh * 0.6), contrast: 1 },
-                  { sx: Math.floor(vw * 0.15), sy: Math.floor(vh * 0.28), sw: Math.floor(vw * 0.7), sh: Math.floor(vh * 0.44), contrast: 1.35 },
+                  { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1.0, scale: 1.0 },
+                  { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1.3, scale: 1.2 },
+                  { sx: Math.floor(vw * 0.15), sy: Math.floor(vh * 0.2), sw: Math.floor(vw * 0.7), sh: Math.floor(vh * 0.6), contrast: 1.15, scale: 1.35 },
+                  { sx: Math.floor(vw * 0.1), sy: Math.floor(vh * 0.3), sw: Math.floor(vw * 0.8), sh: Math.floor(vh * 0.36), contrast: 1.45, scale: 1.6 },
                 ];
-                for (const v of variants) {
-                  canvas.width = Math.max(320, Math.floor(v.sw * 1.35));
-                  canvas.height = Math.max(180, Math.floor(v.sh * 1.35));
-                  ctx.filter = `contrast(${v.contrast}) saturate(1.1)`;
-                  ctx.drawImage(video, v.sx, v.sy, v.sw, v.sh, 0, 0, canvas.width, canvas.height);
-                  try {
-                    const results = await detector.detect(canvas);
-                    const value = results.find((r) => (r.rawValue ?? '').trim())?.rawValue?.trim();
-                    if (value) {
-                      onDecoded(value);
-                      break;
+                try {
+                  const liveResults = await detector.detect(video);
+                  const live = liveResults.find((r) => (r.rawValue ?? '').trim() || r.boundingBox);
+                  if (live?.boundingBox) {
+                    const projected = projectBoundsToViewport(live.boundingBox, video);
+                    if (projected) {
+                      lastBoxAtRef.current = Date.now();
+                      setDetectedBox(projected);
                     }
-                  } catch {
-                    /* ignore detector errors on unsupported frames */
+                  } else if (Date.now() - lastBoxAtRef.current > 850) {
+                    setDetectedBox(null);
+                  }
+                  if ((live?.rawValue ?? '').trim()) {
+                    onDecoded(live.rawValue!.trim());
+                  }
+                } catch {
+                  /* ignore detector errors on live video frame */
+                }
+                for (const v of variants) {
+                  for (const angle of [0, 90, 180, 270]) {
+                    const rotated = angle === 90 || angle === 270;
+                    canvas.width = Math.max(420, Math.floor((rotated ? v.sh : v.sw) * v.scale));
+                    canvas.height = Math.max(220, Math.floor((rotated ? v.sw : v.sh) * v.scale));
+                    ctx.save();
+                    ctx.filter = `contrast(${v.contrast}) saturate(1.1)`;
+                    if (angle === 0) {
+                      ctx.drawImage(video, v.sx, v.sy, v.sw, v.sh, 0, 0, canvas.width, canvas.height);
+                    } else {
+                      ctx.translate(canvas.width / 2, canvas.height / 2);
+                      ctx.rotate((angle * Math.PI) / 180);
+                      ctx.drawImage(video, v.sx, v.sy, v.sw, v.sh, -canvas.height / 2, -canvas.width / 2, canvas.height, canvas.width);
+                    }
+                    ctx.restore();
+                    try {
+                      const results = await detector.detect(canvas);
+                      const value = results.find((r) => (r.rawValue ?? '').trim())?.rawValue?.trim();
+                      if (value) {
+                        onDecoded(value);
+                        break;
+                      }
+                    } catch {
+                      /* ignore detector errors on unsupported frames */
+                    }
                   }
                 }
               }
@@ -527,6 +581,17 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
           {/* Центр: жёлтые углы + линия (визуал); зона распознавания смещена в центр через qrbox */}
           {!error && (
             <div className="pointer-events-none absolute inset-0 z-[205] flex items-center justify-center">
+              {detectedBox && (
+                <div
+                  className="absolute rounded-[4px] border-2 border-[#00E676] shadow-[0_0_14px_rgba(0,230,118,0.75)] transition-all duration-100"
+                  style={{
+                    left: `${detectedBox.left}%`,
+                    top: `${detectedBox.top}%`,
+                    width: `${detectedBox.width}%`,
+                    height: `${detectedBox.height}%`,
+                  }}
+                />
+              )}
               <div className="relative h-[40.8vmin] w-[61.2vmin] max-h-[44vh] max-w-[78vw]">
                 <span className="absolute left-0 top-0 h-8 w-8 rounded-tl-[4px] border-l-[4px] border-t-[4px] border-[#F5E100]" />
                 <span className="absolute right-0 top-0 h-8 w-8 rounded-tr-[4px] border-r-[4px] border-t-[4px] border-[#F5E100]" />
