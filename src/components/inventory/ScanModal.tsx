@@ -76,6 +76,12 @@ const SAME_CODE_COOLDOWN_MS = 1600;
 const NOISE_CODE_WINDOW_MS = 850;
 const QRBOX_WIDTH_FACTOR = 0.61; // примерно на 15% меньше прежнего визуального окна (0.72)
 const QRBOX_ASPECT_RATIO = 1.5; // ширина к высоте
+const FALLBACK_DETECT_INTERVAL_MS = 320;
+
+type BarcodeDetectorResult = { rawValue?: string };
+type BarcodeDetectorLike = { detect: (source: CanvasImageSource) => Promise<BarcodeDetectorResult[]> };
+type BarcodeDetectorCtor = new (opts?: { formats?: string[] }) => BarcodeDetectorLike;
+type BarcodeDetectorGlobal = { BarcodeDetector?: BarcodeDetectorCtor };
 
 function waitForElementById(elementId: string, isCancelled: () => boolean, maxFrames = 120): Promise<boolean> {
   return new Promise((resolve) => {
@@ -133,6 +139,7 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
   const lastScanAtRef = useRef(0);
   const lastCodeRef = useRef('');
   const lastAcceptedRef = useRef<{ code: string; at: number } | null>(null);
+  const fallbackLoopStopRef = useRef<null | (() => void)>(null);
   const soundOnRef = useRef(soundOn);
   const vibrateOnRef = useRef(vibrateOn);
   soundOnRef.current = soundOn;
@@ -141,6 +148,8 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
   const readerId = `qr-reader-${baseId}-${scanAttempt}`;
 
   const stopScanner = useCallback(async () => {
+    fallbackLoopStopRef.current?.();
+    fallbackLoopStopRef.current = null;
     if (scannerRef.current) {
       try {
         await scannerRef.current.stop();
@@ -267,13 +276,70 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
           return;
         }
         await scanner.start(cameraId, config, onDecoded, () => {});
-        scanner
-          .applyVideoConstraints({
-            advanced: [{ focusMode: 'continuous' }, { pointsOfInterest: [{ x: 0.5, y: 0.5 }] }],
-          } as unknown as Parameters<Html5Qrcode['applyVideoConstraints']>[0])
-          .catch(() => {
-            /* часть браузеров/камер игнорирует фокусировку через constraints */
+        const applyQualityConstraints = () =>
+          scanner
+            .applyVideoConstraints({
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              advanced: [
+                { focusMode: 'continuous' },
+                { pointsOfInterest: [{ x: 0.5, y: 0.5 }] },
+                { sharpness: 1 },
+                { contrast: 1 },
+              ],
+            } as unknown as Parameters<Html5Qrcode['applyVideoConstraints']>[0])
+            .catch(() => {
+              /* часть браузеров/камер игнорирует расширенные constraints */
+            });
+        applyQualityConstraints();
+        window.setTimeout(applyQualityConstraints, 700);
+        window.setTimeout(applyQualityConstraints, 1600);
+
+        const globalWithDetector = window as unknown as BarcodeDetectorGlobal;
+        if (globalWithDetector.BarcodeDetector) {
+          const detector = new globalWithDetector.BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar', 'qr_code'],
           });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            let stopped = false;
+            fallbackLoopStopRef.current = () => {
+              stopped = true;
+            };
+            const tick = async () => {
+              if (stopped || cancelled) return;
+              const video = document.querySelector<HTMLVideoElement>(`#${readerId} video`);
+              if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+                const vw = video.videoWidth;
+                const vh = video.videoHeight;
+                const variants = [
+                  { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1 },
+                  { sx: Math.floor(vw * 0.2), sy: Math.floor(vh * 0.2), sw: Math.floor(vw * 0.6), sh: Math.floor(vh * 0.6), contrast: 1 },
+                  { sx: Math.floor(vw * 0.15), sy: Math.floor(vh * 0.28), sw: Math.floor(vw * 0.7), sh: Math.floor(vh * 0.44), contrast: 1.35 },
+                ];
+                for (const v of variants) {
+                  canvas.width = Math.max(320, Math.floor(v.sw * 1.35));
+                  canvas.height = Math.max(180, Math.floor(v.sh * 1.35));
+                  ctx.filter = `contrast(${v.contrast}) saturate(1.1)`;
+                  ctx.drawImage(video, v.sx, v.sy, v.sw, v.sh, 0, 0, canvas.width, canvas.height);
+                  try {
+                    const results = await detector.detect(canvas);
+                    const value = results.find((r) => (r.rawValue ?? '').trim())?.rawValue?.trim();
+                    if (value) {
+                      onDecoded(value);
+                      break;
+                    }
+                  } catch {
+                    /* ignore detector errors on unsupported frames */
+                  }
+                }
+              }
+              if (!stopped && !cancelled) window.setTimeout(() => void tick(), FALLBACK_DETECT_INTERVAL_MS);
+            };
+            void tick();
+          }
+        }
         if (!cancelled && typeof window !== 'undefined') {
           try {
             localStorage.setItem(PREFERRED_CAMERA_DEVICE_ID_KEY, cameraId);
