@@ -74,6 +74,8 @@ const BARCODE_FORMATS: Html5QrcodeSupportedFormats[] = [
 const MIN_GAP_MS = 420;
 const SAME_CODE_COOLDOWN_MS = 1600;
 const NOISE_CODE_WINDOW_MS = 850;
+const QRBOX_WIDTH_FACTOR = 0.61; // примерно на 15% меньше прежнего визуального окна (0.72)
+const QRBOX_ASPECT_RATIO = 1.5; // ширина к высоте
 
 function waitForElementById(elementId: string, isCancelled: () => boolean, maxFrames = 120): Promise<boolean> {
   return new Promise((resolve) => {
@@ -213,6 +215,12 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
         const config = {
           fps: 12,
           disableFlip: false,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const width = Math.max(180, Math.floor(viewfinderWidth * QRBOX_WIDTH_FACTOR));
+            const heightByRatio = Math.floor(width / QRBOX_ASPECT_RATIO);
+            const height = Math.min(Math.max(120, heightByRatio), Math.floor(viewfinderHeight * 0.72));
+            return { width, height };
+          },
         };
 
         const onDecoded = (decodedText: string) => {
@@ -259,6 +267,13 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
           return;
         }
         await scanner.start(cameraId, config, onDecoded, () => {});
+        scanner
+          .applyVideoConstraints({
+            advanced: [{ focusMode: 'continuous' }, { pointsOfInterest: [{ x: 0.5, y: 0.5 }] }],
+          } as unknown as Parameters<Html5Qrcode['applyVideoConstraints']>[0])
+          .catch(() => {
+            /* часть браузеров/камер игнорирует фокусировку через constraints */
+          });
         if (!cancelled && typeof window !== 'undefined') {
           try {
             localStorage.setItem(PREFERRED_CAMERA_DEVICE_ID_KEY, cameraId);
@@ -443,10 +458,10 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
             </div>
           </div>
 
-          {/* Центр: жёлтые углы + линия (визуал); распознавание идёт по всему кадру */}
+          {/* Центр: жёлтые углы + линия (визуал); зона распознавания смещена в центр через qrbox */}
           {!error && (
             <div className="pointer-events-none absolute inset-0 z-[205] flex items-center justify-center">
-              <div className="relative h-[48vmin] w-[72vmin] max-h-[52vh] max-w-[92vw]">
+              <div className="relative h-[40.8vmin] w-[61.2vmin] max-h-[44vh] max-w-[78vw]">
                 <span className="absolute left-0 top-0 h-8 w-8 rounded-tl-[4px] border-l-[4px] border-t-[4px] border-[#F5E100]" />
                 <span className="absolute right-0 top-0 h-8 w-8 rounded-tr-[4px] border-r-[4px] border-t-[4px] border-[#F5E100]" />
                 <span className="absolute bottom-0 left-0 h-8 w-8 rounded-bl-[4px] border-b-[4px] border-l-[4px] border-[#F5E100]" />

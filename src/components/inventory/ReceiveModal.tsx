@@ -516,11 +516,6 @@ export function ReceiveModal({ open, onOpenChange, onOpenCategoryManager, initia
                       Камера для этого сайта отключена. В Chrome / Edge: значок замка слева от адреса → разрешения сайта → Камера → «Разрешить». В Safari: «АА» → Настройки для сайта → Камера. Затем снова нажмите «Сканировать».
                     </p>
                   )}
-                  {cameraPermission === 'prompt' && (
-                    <p className="rounded-lg border border-border bg-muted/30 p-2.5 text-xs leading-snug text-muted-foreground">
-                      Первый раз при «Сканировать» браузер покажет один системный запрос к камере для этого адреса. Дальше, пока вы не сбросите разрешение, запрос не повторяется (так устроены Chrome, Firefox, Edge; в Safari поведение может отличаться).
-                    </p>
-                  )}
                   {cameraPermission === 'granted' && (
                     <p className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-2.5 text-xs leading-snug text-foreground">
                       <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={2} />

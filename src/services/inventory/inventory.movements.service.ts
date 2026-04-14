@@ -1,5 +1,6 @@
 import { getDataSource } from '@/lib/db/data-source';
 import { StockMovementEntity } from '@/lib/db/entities';
+import { hydrateStockMovementProductLabels } from '@/lib/stock-movement-log';
 import type { ShopContext } from '@/services/common/service-context';
 
 function parseDateParam(value: string, endOfDay = false): Date | null {
@@ -49,6 +50,7 @@ export async function listStockMovements(context: ShopContext, searchParams: URL
   }
 
   const rows = await qb.getMany();
+  const rowsWithLabels = await hydrateStockMovementProductLabels(ds.manager, shopId, rows);
 
   const categoryRows = await ds
     .createQueryBuilder()
@@ -74,5 +76,5 @@ export async function listStockMovements(context: ShopContext, searchParams: URL
     categoryEmoji: c.categoryEmoji,
   }));
 
-  return { rows, categories };
+  return { rows: rowsWithLabels, categories };
 }

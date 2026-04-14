@@ -1,4 +1,4 @@
-import { EntityManager } from 'typeorm';
+import { EntityManager, In } from 'typeorm';
 import {
   BrandEntity,
   FlavorEntity,
@@ -7,6 +7,7 @@ import {
   StockMovementContextType,
   StockMovementEntity,
   StockZone,
+  type StockMovement,
 } from '@/lib/db/entities';
 
 type LogStockMovementInput = {
@@ -26,6 +27,33 @@ type LogStockMovementInput = {
   comment?: string | null;
 };
 
+/**
+ * Одна строка «линейка» без повторения названия бренда, если оно уже входит в имя формата
+ * (в БД часто format.name = "{brand} {крепость}" или совпадает с brand.name).
+ */
+export function formatStockProductDisplayLabel(parts: {
+  brandName?: string | null;
+  formatName?: string | null;
+  flavorName?: string | null;
+}): string {
+  const b = (parts.brandName ?? '').trim();
+  const f = (parts.formatName ?? '').trim();
+  const v = (parts.flavorName ?? '').trim();
+  let line = '';
+  if (f) {
+    if (b && (f === b || f.startsWith(`${b} `))) {
+      line = f;
+    } else if (b) {
+      line = `${b} ${f}`;
+    } else {
+      line = f;
+    }
+  } else {
+    line = b;
+  }
+  return [line, v].filter(Boolean).join(' ');
+}
+
 export async function resolveProductUiName(
   em: EntityManager,
   shopId: string,
@@ -41,8 +69,48 @@ export async function resolveProductUiName(
   const brand = format
     ? await em.getRepository(BrandEntity).findOne({ where: { id: format.brandId, shopId } })
     : null;
-  const parts = [brand?.name, format?.name, flavor.name].filter(Boolean);
-  return parts.join(' ');
+  return formatStockProductDisplayLabel({
+    brandName: brand?.name ?? null,
+    formatName: format?.name ?? null,
+    flavorName: flavor.name ?? null,
+  });
+}
+
+/** Пересчитать подпись товара для списка движений (в т.ч. старые записи со снимком-дубликатом). */
+export async function hydrateStockMovementProductLabels(
+  em: EntityManager,
+  shopId: string,
+  rows: StockMovement[],
+): Promise<StockMovement[]> {
+  if (rows.length === 0) return rows;
+  const flavorIds = [...new Set(rows.map((r) => r.productId))];
+  const flavors = await em.getRepository(FlavorEntity).find({
+    where: { shopId, id: In(flavorIds) },
+  });
+  const flavorById = new Map(flavors.map((x) => [x.id, x]));
+  const formatIds = [...new Set(flavors.map((x) => x.productFormatId).filter(Boolean))] as string[];
+  const formats = formatIds.length
+    ? await em.getRepository(ProductFormatEntity).find({ where: { shopId, id: In(formatIds) } })
+    : [];
+  const formatById = new Map(formats.map((x) => [x.id, x]));
+  const brandIds = [...new Set(formats.map((x) => x.brandId).filter(Boolean))] as string[];
+  const brands = brandIds.length
+    ? await em.getRepository(BrandEntity).find({ where: { shopId, id: In(brandIds) } })
+    : [];
+  const brandById = new Map(brands.map((x) => [x.id, x]));
+
+  return rows.map((row) => {
+    const flavor = flavorById.get(row.productId);
+    if (!flavor) return row;
+    const format = formatById.get(flavor.productFormatId);
+    const brand = format ? brandById.get(format.brandId) : undefined;
+    const productName = formatStockProductDisplayLabel({
+      brandName: brand?.name ?? null,
+      formatName: format?.name ?? null,
+      flavorName: flavor.name ?? null,
+    });
+    return { ...row, productName };
+  });
 }
 
 export async function logStockMovement(
