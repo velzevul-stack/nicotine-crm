@@ -76,7 +76,12 @@ const SAME_CODE_COOLDOWN_MS = 1600;
 const NOISE_CODE_WINDOW_MS = 850;
 const QRBOX_WIDTH_FACTOR = 0.61; // визуальная рамка (не ограничивает декодирование)
 const QRBOX_ASPECT_RATIO = 1.5; // ширина к высоте
-const FALLBACK_DETECT_INTERVAL_MS = 320;
+/** Интервал между проходами fallback-детектора: чаще = больше шансов поймать кадр в фокусе. */
+const FALLBACK_DETECT_INTERVAL_MS = 200;
+/** FPS основного сканера: баланс между отзывчивостью и нагрузкой на CPU/батарею. */
+const SCANNER_FPS = 22;
+/** Зелёная обводка на ~10% меньше bbox детектора (визуально ближе к полосам кода). */
+const OVERLAY_SHRINK = 0.9;
 
 type BarcodeBounds = { x: number; y: number; width: number; height: number };
 type BarcodeDetectorResult = { rawValue?: string; boundingBox?: BarcodeBounds };
@@ -86,6 +91,21 @@ type BarcodeDetectorGlobal = { BarcodeDetector?: BarcodeDetectorCtor };
 
 function clampPct(n: number) {
   return Math.min(100, Math.max(0, n));
+}
+
+type OverlayBox = { left: number; top: number; width: number; height: number };
+
+function shrinkOverlayBoxPct(box: OverlayBox, factor = OVERLAY_SHRINK): OverlayBox {
+  const w = box.width * factor;
+  const h = box.height * factor;
+  const left = box.left + (box.width - w) / 2;
+  const top = box.top + (box.height - h) / 2;
+  return {
+    left: clampPct(left),
+    top: clampPct(top),
+    width: clampPct(w),
+    height: clampPct(h),
+  };
 }
 
 function waitForElementById(elementId: string, isCancelled: () => boolean, maxFrames = 120): Promise<boolean> {
@@ -128,7 +148,7 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
   const [showManual, setShowManual] = useState(false);
   const [scanAttempt, setScanAttempt] = useState(0);
   const [banners, setBanners] = useState<ScanBanner[]>([]);
-  const [detectedBox, setDetectedBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [detectedBox, setDetectedBox] = useState<OverlayBox | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   const [vibrateOn, setVibrateOn] = useState(true);
   const [flashOn, setFlashOn] = useState(false);
@@ -229,7 +249,7 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
         scannerRef.current = scanner;
 
         const config = {
-          fps: 12,
+          fps: SCANNER_FPS,
           disableFlip: false,
         };
 
@@ -302,22 +322,35 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
         const applyQualityConstraints = () =>
           scanner
             .applyVideoConstraints({
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
+              width: { ideal: 1920, min: 640 },
+              height: { ideal: 1080, min: 480 },
+              frameRate: { ideal: 30, max: 30 },
               advanced: [
                 { focusMode: 'continuous' },
                 { pointsOfInterest: [{ x: 0.5, y: 0.5 }] },
                 { zoom: 1.0 },
                 { sharpness: 1 },
                 { contrast: 1 },
+                { exposureMode: 'continuous' },
+                { whiteBalanceMode: 'continuous' },
               ],
             } as unknown as Parameters<Html5Qrcode['applyVideoConstraints']>[0])
             .catch(() => {
-              /* часть браузеров/камер игнорирует расширенные constraints */
+              scanner
+                .applyVideoConstraints({
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 },
+                  frameRate: { ideal: 24 },
+                  advanced: [{ focusMode: 'continuous' }, { pointsOfInterest: [{ x: 0.5, y: 0.5 }] }],
+                } as unknown as Parameters<Html5Qrcode['applyVideoConstraints']>[0])
+                .catch(() => {
+                  /* часть браузеров/камер игнорирует расширенные constraints */
+                });
             });
         applyQualityConstraints();
-        window.setTimeout(applyQualityConstraints, 700);
-        window.setTimeout(applyQualityConstraints, 1600);
+        window.setTimeout(applyQualityConstraints, 400);
+        window.setTimeout(applyQualityConstraints, 900);
+        window.setTimeout(applyQualityConstraints, 1800);
 
         const globalWithDetector = window as unknown as BarcodeDetectorGlobal;
         if (globalWithDetector.BarcodeDetector) {
@@ -339,9 +372,12 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
                 const vh = video.videoHeight;
                 const variants = [
                   { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1.0, scale: 1.0 },
-                  { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1.3, scale: 1.2 },
-                  { sx: Math.floor(vw * 0.15), sy: Math.floor(vh * 0.2), sw: Math.floor(vw * 0.7), sh: Math.floor(vh * 0.6), contrast: 1.15, scale: 1.35 },
-                  { sx: Math.floor(vw * 0.1), sy: Math.floor(vh * 0.3), sw: Math.floor(vw * 0.8), sh: Math.floor(vh * 0.36), contrast: 1.45, scale: 1.6 },
+                  { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1.25, scale: 1.15 },
+                  { sx: 0, sy: 0, sw: vw, sh: vh, contrast: 1.45, scale: 1.28 },
+                  { sx: Math.floor(vw * 0.1), sy: Math.floor(vh * 0.15), sw: Math.floor(vw * 0.8), sh: Math.floor(vh * 0.7), contrast: 1.12, scale: 1.32 },
+                  { sx: Math.floor(vw * 0.15), sy: Math.floor(vh * 0.2), sw: Math.floor(vw * 0.7), sh: Math.floor(vh * 0.6), contrast: 1.2, scale: 1.4 },
+                  { sx: Math.floor(vw * 0.1), sy: Math.floor(vh * 0.3), sw: Math.floor(vw * 0.8), sh: Math.floor(vh * 0.36), contrast: 1.5, scale: 1.65 },
+                  { sx: Math.floor(vw * 0.2), sy: Math.floor(vh * 0.35), sw: Math.floor(vw * 0.6), sh: Math.floor(vh * 0.28), contrast: 1.55, scale: 1.85 },
                 ];
                 try {
                   const liveResults = await detector.detect(video);
@@ -350,24 +386,27 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
                     const projected = projectBoundsToViewport(live.boundingBox, video);
                     if (projected) {
                       lastBoxAtRef.current = Date.now();
-                      setDetectedBox(projected);
+                      setDetectedBox(shrinkOverlayBoxPct(projected));
                     }
                   } else if (Date.now() - lastBoxAtRef.current > 850) {
                     setDetectedBox(null);
                   }
-                  if ((live?.rawValue ?? '').trim()) {
-                    onDecoded(live.rawValue!.trim());
+                  const liveTrimmed = (live?.rawValue ?? '').trim();
+                  if (liveTrimmed) {
+                    onDecoded(liveTrimmed);
                   }
                 } catch {
                   /* ignore detector errors on live video frame */
                 }
+                let decodedThisTick = false;
                 for (const v of variants) {
+                  if (decodedThisTick) break;
                   for (const angle of [0, 90, 180, 270]) {
                     const rotated = angle === 90 || angle === 270;
                     canvas.width = Math.max(420, Math.floor((rotated ? v.sh : v.sw) * v.scale));
                     canvas.height = Math.max(220, Math.floor((rotated ? v.sw : v.sh) * v.scale));
                     ctx.save();
-                    ctx.filter = `contrast(${v.contrast}) saturate(1.1)`;
+                    ctx.filter = `contrast(${v.contrast}) saturate(1.12)`;
                     if (angle === 0) {
                       ctx.drawImage(video, v.sx, v.sy, v.sw, v.sh, 0, 0, canvas.width, canvas.height);
                     } else {
@@ -381,6 +420,7 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
                       const value = results.find((r) => (r.rawValue ?? '').trim())?.rawValue?.trim();
                       if (value) {
                         onDecoded(value);
+                        decodedThisTick = true;
                         break;
                       }
                     } catch {
@@ -583,12 +623,13 @@ export function ScanModal({ open, onOpenChange, onScan, closeOnScan = false }: S
             <div className="pointer-events-none absolute inset-0 z-[205] flex items-center justify-center">
               {detectedBox && (
                 <div
-                  className="absolute rounded-[4px] border-2 border-[#00E676] shadow-[0_0_14px_rgba(0,230,118,0.75)] transition-all duration-100"
+                  className="absolute rounded-[3px] shadow-[0_0_12px_rgba(0,230,118,0.68)] transition-all duration-100"
                   style={{
                     left: `${detectedBox.left}%`,
                     top: `${detectedBox.top}%`,
                     width: `${detectedBox.width}%`,
                     height: `${detectedBox.height}%`,
+                    border: '1.8px solid #00E676',
                   }}
                 />
               )}
